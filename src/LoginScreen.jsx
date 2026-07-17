@@ -1,24 +1,28 @@
 import React, { useState } from "react";
+import { signInWithPassword } from "./lib/auth.js";
 
-// Wireframe only — no real authentication yet (that's Phase 1 in the auth
-// planning doc). This just gates entry to the app and captures which view
-// mode to open in, replacing the old corner toggle inside AppShell.
-export default function LoginScreen({ onEnter }) {
+export default function LoginScreen({ onSignedIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [viewMode, setViewMode] = useState("mobile");
-  const [touched, setTouched] = useState(false);
+  const [status, setStatus] = useState(null); // null | "loading" | "error"
+  const [error, setError] = useState(null);
 
-  const canEnter = email.trim() !== "" && password !== "";
-
-  const handleEnter = () => {
-    setTouched(true);
-    if (!canEnter) return;
-    onEnter(viewMode);
+  const handleSignIn = async () => {
+    if (!email.trim() || !password) return;
+    setStatus("loading");
+    setError(null);
+    try {
+      await signInWithPassword(email.trim(), password);
+      onSignedIn();
+    } catch (err) {
+      console.error("Sign-in failed:", err);
+      setError(err.message || "Couldn't sign in — check your email and password.");
+      setStatus("error");
+    }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleEnter();
+    if (e.key === "Enter") handleSignIn();
   };
 
   return (
@@ -36,11 +40,7 @@ export default function LoginScreen({ onEnter }) {
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');`}</style>
 
-      <img
-        src="/bco-logo.jpg"
-        alt="Boys Club Open"
-        style={{ width: 168, height: 168, borderRadius: 16, marginBottom: 28 }}
-      />
+      <img src="/bco-logo.jpg" alt="Boys Club Open" style={{ width: 168, height: 168, borderRadius: 16, marginBottom: 28 }} />
 
       <div
         style={{
@@ -59,16 +59,8 @@ export default function LoginScreen({ onEnter }) {
           onChange={(e) => setEmail(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="you@example.com"
-          style={{
-            width: "100%",
-            boxSizing: "border-box",
-            border: `1px solid ${touched && !email.trim() ? "#C1554E" : "#DCD6C4"}`,
-            borderRadius: 8,
-            padding: "10px 12px",
-            fontSize: 14,
-            marginBottom: 14,
-            fontFamily: "inherit",
-          }}
+          autoComplete="username"
+          style={{ width: "100%", boxSizing: "border-box", border: "1px solid #DCD6C4", borderRadius: 8, padding: "10px 12px", fontSize: 14, marginBottom: 14, fontFamily: "inherit" }}
         />
 
         <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em" }}>PASSWORD</div>
@@ -78,61 +70,15 @@ export default function LoginScreen({ onEnter }) {
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="••••••••"
-          style={{
-            width: "100%",
-            boxSizing: "border-box",
-            border: `1px solid ${touched && !password ? "#C1554E" : "#DCD6C4"}`,
-            borderRadius: 8,
-            padding: "10px 12px",
-            fontSize: 14,
-            marginBottom: 18,
-            fontFamily: "inherit",
-          }}
+          autoComplete="current-password"
+          style={{ width: "100%", boxSizing: "border-box", border: "1px solid #DCD6C4", borderRadius: 8, padding: "10px 12px", fontSize: 14, marginBottom: 18, fontFamily: "inherit" }}
         />
 
-        <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em" }}>VIEW AS</div>
-        <div style={{ display: "flex", border: "1px solid #DCD6C4", borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
-          <button
-            onClick={() => setViewMode("mobile")}
-            style={{
-              flex: 1,
-              border: "none",
-              background: viewMode === "mobile" ? "#1B4332" : "#FFFFFF",
-              color: viewMode === "mobile" ? "#F3EFE2" : "#6B6455",
-              padding: "9px 0",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Mobile
-          </button>
-          <button
-            onClick={() => setViewMode("desktop")}
-            style={{
-              flex: 1,
-              border: "none",
-              borderLeft: "1px solid #DCD6C4",
-              background: viewMode === "desktop" ? "#1B4332" : "#FFFFFF",
-              color: viewMode === "desktop" ? "#F3EFE2" : "#6B6455",
-              padding: "9px 0",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Desktop
-          </button>
-        </div>
-
-        {touched && !canEnter && (
-          <div style={{ fontSize: 11.5, color: "#A3492E", marginBottom: 12 }}>Enter an email and password to continue.</div>
-        )}
+        {status === "error" && <div style={{ fontSize: 11.5, color: "#A3492E", marginBottom: 12, lineHeight: 1.5 }}>{error}</div>}
 
         <button
-          onClick={handleEnter}
+          onClick={handleSignIn}
+          disabled={status === "loading"}
           style={{
             width: "100%",
             border: "none",
@@ -144,13 +90,14 @@ export default function LoginScreen({ onEnter }) {
             fontWeight: 600,
             cursor: "pointer",
             fontFamily: "inherit",
+            opacity: status === "loading" ? 0.7 : 1,
           }}
         >
-          Enter
+          {status === "loading" ? "Signing in…" : "Sign in"}
         </button>
 
         <div style={{ fontSize: 10, color: "#B4AE9E", marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>
-          Wireframe login — accounts and access levels aren't live yet.
+          New here? You'll need an invite from the organizer — check your email for a link to set your password.
         </div>
       </div>
     </div>

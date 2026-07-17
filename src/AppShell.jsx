@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import Papa from "papaparse";
+import { signOut } from "./lib/auth.js";
 import {
   fetchSoloStandings,
   fetchSoloRoundTotals,
@@ -598,7 +599,7 @@ const SHARED_STYLES = `
   table.bco-table td { padding: 9px 6px; border-bottom: 1px solid #EFEBDE; vertical-align: middle; }
 `;
 
-export default function AppShell({ initialYear, isLive = false, loadError = null, initialViewMode = "mobile" } = {}) {
+export default function AppShell({ initialYear, isLive = false, loadError = null, initialViewMode = "mobile", myPlayer = null } = {}) {
   const [activeTab, setActiveTab] = useState("score");
   // Mobile (phone-frame, bottom nav) or Desktop (taller frame, side nav).
   // Internal screens stay single-column either way — this switches the
@@ -712,13 +713,14 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
           isLive={isLive}
           loadError={loadError}
           currentEventId={currentEventId}
+          myPlayer={myPlayer}
         />
       )}
       {activeTab === "leaderboard" && <Leaderboard isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />}
       {activeTab === "matches" && <MatchResultsTab scoresStore={scoresStore} currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
       {activeTab === "games" && <GamesTab currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
       {activeTab === "more" && (
-        <More currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} currentEventId={currentEventId} refreshRoundMap={refreshRoundMap} />
+        <More currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} currentEventId={currentEventId} refreshRoundMap={refreshRoundMap} myPlayer={myPlayer} />
       )}
     </>
   );
@@ -823,8 +825,8 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
 // ---------------------------------------------------------------------------
 // Score entry tab
 // ---------------------------------------------------------------------------
-function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadError, currentEventId }) {
-  const [selectedPlayerId, setSelectedPlayerId] = useState("");
+function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadError, currentEventId, myPlayer }) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState(() => (myPlayer ? String(myPlayer.id) : ""));
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [teamOptionsList, setTeamOptionsList] = useState([]);
   const [teamHoleResults, setTeamHoleResults] = useState({}); // "teamId-hole" -> {netScore, points}
@@ -2317,8 +2319,13 @@ function LightSelect({ value, onChange, options }) {
 // More tab — settings hub. Currently houses Record Book and Admin; other
 // management screens will get added here as their own menu rows.
 // ---------------------------------------------------------------------------
-function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoundMap }) {
+function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoundMap, myPlayer }) {
   const [view, setView] = useState("menu");
+  // Not real security yet — that's what RLS (sql/26) is for. This just
+  // keeps the menu honest about what a non-admin can actually do once RLS
+  // is on. In demo/offline mode (no real accounts at all) everything stays
+  // visible, same as before.
+  const isAdmin = !isLive || myPlayer?.is_admin === true;
 
   if (view === "recordbook") {
     return <RecordBook onBack={() => setView("menu")} isLive={isLive} />;
@@ -2358,7 +2365,7 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
     { key: "recordbook", label: "Record Book", note: "All-time solo and team stats", icon: BookOpen, enabled: true },
     { key: "players", label: "Players", note: "Roster, bios, and handicap indexes", icon: Flag, enabled: true },
     { key: "courses", label: "Courses", note: "Course-tees and hole-by-hole data", icon: Trophy, enabled: true },
-    { key: "admin", label: "Admin", note: "Imports, exports, and event settings", icon: MoreHorizontal, enabled: true },
+    { key: "admin", label: "Admin", note: "Imports, exports, and event settings", icon: MoreHorizontal, enabled: isAdmin },
   ];
 
   return (
@@ -2393,7 +2400,7 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "#2C2A22" }}>{item.label}</div>
                 <div style={{ fontSize: 11, color: "#8A8371", marginTop: 1 }}>
-                  {item.enabled ? item.note : `${item.note} — coming soon`}
+                  {item.enabled ? item.note : item.key === "admin" ? "Organizer only" : `${item.note} — coming soon`}
                 </div>
               </div>
               {item.enabled && <ChevronRight size={16} color="#B9B3A2" />}
@@ -2401,6 +2408,30 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
           );
         })}
       </div>
+
+      {isLive && (
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid #E4DFCE" }}>
+          <div style={{ fontSize: 11.5, color: "#8A8371", marginBottom: 8 }}>
+            {myPlayer ? `Signed in as ${myPlayer.name}` : "Signed in"}
+          </div>
+          <button
+            onClick={() => signOut().then(() => window.location.reload())}
+            style={{
+              border: "1px solid #DCD6C4",
+              background: "#FFFFFF",
+              color: "#6B6455",
+              borderRadius: 8,
+              padding: "8px 14px",
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
