@@ -14,9 +14,11 @@
 
 -- -----------------------------------------------------------------------------
 -- Course handicap: Handicap Index x (Slope/113) + (Rating - Par), rounded.
--- No upper cap — players get every stroke their index earns them. Holes
--- beyond the first 18 (or 9, on a 9-hole course) worth of strokes get a
--- second stroke on the hardest holes — see strokes_for_hole() below.
+-- No floor at 0 — a plus-handicap player genuinely has a negative course
+-- handicap; flooring would make them indistinguishable from scratch. No
+-- upper cap either — players get every stroke their index earns them.
+-- Holes beyond the first 18 (or 9, on a 9-hole course) worth of strokes get
+-- a second stroke on the hardest holes — see strokes_for_hole() below.
 -- -----------------------------------------------------------------------------
 create or replace function course_handicap(
   p_final_index numeric,
@@ -24,20 +26,28 @@ create or replace function course_handicap(
   p_rating numeric,
   p_total_par integer
 ) returns integer language sql immutable as $$
-  select greatest(0, round(p_final_index * (p_slope::numeric / 113) + (p_rating - p_total_par)))::integer
+  select round(p_final_index * (p_slope::numeric / 113) + (p_rating - p_total_par))::integer
 $$;
 
 -- Distributes a handicap value across a course's holes: every hole gets
 -- floor(handicap / total_holes) strokes as a base, and the hardest
--- (handicap mod total_holes) holes get one additional stroke on top.
+-- (handicap mod total_holes) holes get one additional stroke on top. For a
+-- negative (plus-handicap) value, strokes are given back instead, starting
+-- from the EASIEST holes rather than added starting from the hardest.
 create or replace function strokes_for_hole(
   p_handicap_value integer,
   p_handicap_rank integer,
   p_total_holes integer
 ) returns integer language sql immutable as $$
   select case
-    when p_handicap_value is null or p_handicap_value <= 0 or p_total_holes <= 0 then 0
-    else (p_handicap_value / p_total_holes) + (case when p_handicap_rank <= (p_handicap_value % p_total_holes) then 1 else 0 end)
+    when p_handicap_value is null or p_handicap_value = 0 or p_total_holes <= 0 then 0
+    when p_handicap_value > 0 then
+      (p_handicap_value / p_total_holes) + (case when p_handicap_rank <= (p_handicap_value % p_total_holes) then 1 else 0 end)
+    else
+      -1 * (
+        (abs(p_handicap_value) / p_total_holes)
+        + (case when p_handicap_rank > (p_total_holes - (abs(p_handicap_value) % p_total_holes)) then 1 else 0 end)
+      )
   end
 $$;
 

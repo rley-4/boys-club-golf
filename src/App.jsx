@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AppShell, { PLAYERS, COURSES } from "./AppShell.jsx";
+import LoginScreen from "./LoginScreen.jsx";
 import { supabaseConfigured } from "./lib/supabaseClient.js";
 import { fetchCurrentEvent, fetchPlayers, fetchCourses } from "./lib/api.js";
 
@@ -8,6 +9,8 @@ export default function App() {
   const [isLive, setIsLive] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [initialYear, setInitialYear] = useState(undefined);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [viewMode, setViewMode] = useState("mobile");
 
   useEffect(() => {
     let cancelled = false;
@@ -79,9 +82,20 @@ export default function App() {
     );
   }
 
+  if (!loggedIn) {
+    return (
+      <LoginScreen
+        onEnter={(mode) => {
+          setViewMode(mode);
+          setLoggedIn(true);
+        }}
+      />
+    );
+  }
+
   return (
     <div style={{ padding: "24px 12px", minHeight: "100vh", background: "#EFEAE0" }}>
-      <AppShell initialYear={initialYear} isLive={isLive} loadError={loadError} />
+      <AppShell initialYear={initialYear} isLive={isLive} loadError={loadError} initialViewMode={viewMode} />
     </div>
   );
 }

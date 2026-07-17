@@ -386,21 +386,38 @@ function yearlyTeamStat(p, year) {
 // ---------------------------------------------------------------------------
 function calcCourseHandicap(handicapIndex, slope, rating, par) {
   const raw = handicapIndex * (slope / 113) + (rating - par);
-  const rounded = Math.round(raw);
-  return Math.max(0, rounded);
+  // No floor at 0 — a plus-handicap player (index below scratch, or a very
+  // easy course relative to their index) genuinely has a negative course
+  // handicap. Flooring it at 0 would make them indistinguishable from a
+  // dead-scratch player, which understates how good they are relative to
+  // the field. See strokesForHole for how a negative value is applied.
+  return Math.round(raw);
 }
 
-// Distributes a handicap value across a course's holes: every hole gets a
-// base number of strokes (floor(value / totalHoles)), and the hardest
-// (value % totalHoles) holes get one additional stroke on top. This is what
-// makes a course handicap above 18 actually mean something — without it,
-// removing the cap would have no visible effect since a plain "rank <= CH"
-// check tops out at one stroke per hole regardless of how high CH goes.
+// Distributes a handicap value across a course's holes. For a positive
+// value: every hole gets a base number of strokes (floor(value /
+// totalHoles)), and the hardest (value % totalHoles) holes get one
+// additional stroke on top — this is what makes a course handicap above 18
+// actually mean something.
+//
+// For a negative (plus-handicap) value, strokes are given back instead —
+// same distribution logic, but starting from the EASIEST holes (the
+// highest handicap rank number) rather than the hardest, per standard
+// stroke-allocation convention. The return value is negative, so net =
+// gross - strokeReceived correctly comes out HIGHER than gross on those
+// holes (a plus player's net score is harder to beat than their gross).
 function strokesForHole(handicapValue, handicapRank, totalHoles) {
-  if (handicapValue == null || handicapValue <= 0 || !totalHoles) return 0;
-  const base = Math.floor(handicapValue / totalHoles);
-  const remainder = handicapValue % totalHoles;
-  return base + (handicapRank <= remainder ? 1 : 0);
+  if (handicapValue == null || handicapValue === 0 || !totalHoles) return 0;
+  if (handicapValue > 0) {
+    const base = Math.floor(handicapValue / totalHoles);
+    const remainder = handicapValue % totalHoles;
+    return base + (handicapRank <= remainder ? 1 : 0);
+  }
+  const absValue = Math.abs(handicapValue);
+  const base = Math.floor(absValue / totalHoles);
+  const remainder = absValue % totalHoles;
+  const extra = handicapRank > totalHoles - remainder ? 1 : 0;
+  return -(base + extra);
 }
 
 // Match-play "Pops" — only meaningful in the context of a specific foursome
@@ -581,26 +598,13 @@ const SHARED_STYLES = `
   table.bco-table td { padding: 9px 6px; border-bottom: 1px solid #EFEBDE; vertical-align: middle; }
 `;
 
-export default function AppShell({ initialYear, isLive = false, loadError = null } = {}) {
+export default function AppShell({ initialYear, isLive = false, loadError = null, initialViewMode = "mobile" } = {}) {
   const [activeTab, setActiveTab] = useState("score");
   // Mobile (phone-frame, bottom nav) or Desktop (taller frame, side nav).
   // Internal screens stay single-column either way — this switches the
-  // app's chrome, not a per-screen responsive redesign.
-  const [viewMode, setViewMode] = useState(() => {
-    try {
-      return localStorage.getItem("bco-view-mode") || "mobile";
-    } catch {
-      return "mobile";
-    }
-  });
-  const setViewModePersisted = (mode) => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem("bco-view-mode", mode);
-    } catch {
-      // ignore — not critical if it doesn't persist
-    }
-  };
+  // app's chrome, not a per-screen responsive redesign. Chosen on the
+  // login screen now, not a corner toggle inside the app.
+  const [viewMode] = useState(initialViewMode);
   // Shared across Score and Matches so match progress reflects live saves.
   // Key: "year-round-playerId" -> { entries: { [hole]: {strokes, putts} }, status: "in-progress" | "submitted" }
   const [scoresStore, setScoresStore] = useState({});
@@ -719,26 +723,10 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
     </>
   );
 
-  // View toggle — sits above the frame either way, so it's reachable
-  // regardless of which mode is currently active.
-  const viewToggle = (
-    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, maxWidth: isDesktop ? 840 : 460, marginLeft: "auto", marginRight: "auto" }}>
-      <div className="bco-seg" style={{ width: "auto" }}>
-        <button className={`bco-seg-btn${!isDesktop ? " active" : ""}`} onClick={() => setViewModePersisted("mobile")} style={{ padding: "5px 14px" }}>
-          Mobile
-        </button>
-        <button className={`bco-seg-btn${isDesktop ? " active" : ""}`} onClick={() => setViewModePersisted("desktop")} style={{ padding: "5px 14px" }}>
-          Desktop
-        </button>
-      </div>
-    </div>
-  );
-
   if (isDesktop) {
     return (
       <div>
         <style>{SHARED_STYLES}</style>
-        {viewToggle}
         <div
           style={{
             maxWidth: 840,
@@ -797,7 +785,6 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
 
   return (
     <div>
-      {viewToggle}
       <div
         style={{
           maxWidth: 460,
@@ -1514,9 +1501,24 @@ function GameNotApplicable({ round, game }) {
 }
 
 function GamesTab({ currentYear, isLive, currentEventId }) {
+  const yr = useYearRoundData(isLive, currentYear);
   const [round, setRound] = useState(SCORE_ROUNDS[0]);
   const [mode, setMode] = useState("poker");
-  const roundId = ROUND_ID_BY_LABEL[round] || null;
+
+  // Keep the selected round valid whenever the selected year's rounds load
+  // or the year changes.
+  useEffect(() => {
+    if (!isLive) return;
+    if (yr.rounds.length === 0) return;
+    if (!yr.rounds.some((r) => r.label === round)) setRound(yr.rounds[0].label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive, yr.rounds]);
+
+  const liveRound = isLive ? yr.rounds.find((r) => r.label === round) : null;
+  const roundId = isLive ? liveRound?.id || null : ROUND_ID_BY_LABEL[round] || null;
+  const flags = isLive
+    ? liveRound || { appliesPoker: true, appliesSkins: true, appliesCtp: true, appliesLowNet: true }
+    : ROUND_FLAGS[round] || {};
 
   return (
     <div>
@@ -1525,11 +1527,17 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
           <div className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332" }}>
             Games
           </div>
-          <span style={{ fontSize: 11, color: "#8A8371" }}>{currentYear}</span>
+          <span style={{ fontSize: 11, color: "#8A8371" }}>{yr.selectedYear}</span>
         </div>
 
+        <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
+
         <div style={{ marginBottom: 14 }}>
-          <LightSelect value={round} onChange={setRound} options={SCORE_ROUNDS.map((r) => ({ value: r, label: r }))} />
+          <LightSelect
+            value={round}
+            onChange={setRound}
+            options={(isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS).map((r) => ({ value: r, label: r }))}
+          />
         </div>
 
         <div className="bco-seg" style={{ marginBottom: 16 }}>
@@ -1543,28 +1551,28 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
 
       <div style={{ padding: "0 20px 24px" }}>
         {mode === "poker" &&
-          (ROUND_FLAGS[round]?.appliesPoker === false ? (
+          (flags.appliesPoker === false ? (
             <GameNotApplicable round={round} game="Poker" />
           ) : (
-            <PokerPanel round={round} year={currentYear} isLive={isLive} roundId={roundId} />
+            <PokerPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} />
           ))}
         {mode === "skins" &&
-          (ROUND_FLAGS[round]?.appliesSkins === false ? (
+          (flags.appliesSkins === false ? (
             <GameNotApplicable round={round} game="Skins" />
           ) : (
-            <SkinsPanel round={round} year={currentYear} isLive={isLive} roundId={roundId} />
+            <SkinsPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} />
           ))}
         {mode === "ctp" &&
-          (ROUND_FLAGS[round]?.appliesCtp === false ? (
+          (flags.appliesCtp === false ? (
             <GameNotApplicable round={round} game="CTP" />
           ) : (
-            <CtpPanel round={round} year={currentYear} isLive={isLive} roundId={roundId} currentEventId={currentEventId} />
+            <CtpPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} />
           ))}
         {mode === "lownet" &&
-          (ROUND_FLAGS[round]?.appliesLowNet === false ? (
+          (flags.appliesLowNet === false ? (
             <GameNotApplicable round={round} game="Low Net" />
           ) : (
-            <LowNetPanel round={round} year={currentYear} isLive={isLive} roundId={roundId} currentEventId={currentEventId} />
+            <LowNetPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} />
           ))}
       </div>
     </div>
@@ -6255,6 +6263,7 @@ function computeMatchProgress(match, round, scoresStore, year, teamsSource) {
 }
 
 function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
+  const yr = useYearRoundData(isLive, currentYear);
   const [round, setRound] = useState(SCORE_ROUNDS[0]);
   const [liveTeams, setLiveTeams] = useState(null); // null = use mock TEAMS
   const [liveMatchups, setLiveMatchups] = useState(null); // null = use mock MATCHES_BY_ROUND
@@ -6262,13 +6271,24 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
   const [carrollRoster, setCarrollRoster] = useState({}); // playerId -> "red" | "blue"
   const [drilldown, setDrilldown] = useState(null); // { roundId, roundLabel, teamAId, teamBId, teamAName, teamBName } | null
 
+  // Whenever the selected year's rounds load (or the year changes), make
+  // sure the selected round label is actually one that exists for that
+  // year — otherwise default to the first one.
+  useEffect(() => {
+    if (!isLive) return;
+    if (yr.rounds.length === 0) return;
+    if (!yr.rounds.some((r) => r.label === round)) setRound(yr.rounds[0].label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive, yr.rounds]);
+
   // Pulls whatever's actually configured on Admin > Matchup setup, instead
   // of the frozen mock schedule — this is what makes a newly-added round's
   // matchups actually show up here. Match totals are the real points, once
   // both teams have submitted scores for that round (v_team_match_totals
-  // only has rows for holes that are actually scored).
+  // only has rows for holes that are actually scored). Scoped to whichever
+  // year is selected here, independent of the global Current Year.
   useEffect(() => {
-    if (!isLive || !currentEventId) {
+    if (!isLive || !yr.selectedEventId) {
       setLiveTeams(null);
       setLiveMatchups(null);
       setLiveMatchTotals(null);
@@ -6279,10 +6299,10 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
     (async () => {
       try {
         const [teamsData, matchupsData, matchTotalsData, rosterData] = await Promise.all([
-          fetchTeams(currentEventId),
-          fetchRoundMatchups(currentEventId),
-          fetchTeamMatchTotals(currentEventId),
-          fetchCarrollCupRoster(currentEventId),
+          fetchTeams(yr.selectedEventId),
+          fetchRoundMatchups(yr.selectedEventId),
+          fetchTeamMatchTotals(yr.selectedEventId),
+          fetchCarrollCupRoster(yr.selectedEventId),
         ]);
         if (cancelled) return;
         setLiveTeams(
@@ -6303,10 +6323,11 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
     return () => {
       cancelled = true;
     };
-  }, [isLive, currentEventId]);
+  }, [isLive, yr.selectedEventId]);
 
   const teamsSource = liveTeams || TEAMS;
-  const course = ROUND_COURSE[round] || COURSES[0];
+  const liveRound = isLive ? yr.rounds.find((r) => r.label === round) : null;
+  const course = isLive ? (liveRound ? COURSES.find((c) => c.id === liveRound.courseId) : null) || COURSES[0] : ROUND_COURSE[round] || COURSES[0];
   const totalPar = useMemo(() => course.holes.reduce((s, h) => s + h.par, 0), [course]);
 
   const getHandicap = (playerName) => {
@@ -6348,13 +6369,13 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
             };
           })
       : MATCHES_BY_ROUND[round] || [];
-    const withProgress = list.map((m) => ({ ...m, progress: computeMatchProgress(m, round, scoresStore, currentYear, teamsSource) }));
+    const withProgress = list.map((m) => ({ ...m, progress: computeMatchProgress(m, round, scoresStore, yr.selectedYear, teamsSource) }));
     return withProgress.sort((a, b) => {
       const av = a.progress.final ? 19 : a.progress.marker;
       const bv = b.progress.final ? 19 : b.progress.marker;
       return bv - av;
     });
-  }, [liveMatchups, liveTeams, liveMatchTotals, carrollRoster, round, scoresStore, currentYear, teamsSource]);
+  }, [liveMatchups, liveTeams, liveMatchTotals, carrollRoster, round, scoresStore, yr.selectedYear, teamsSource]);
 
   if (drilldown) {
     return (
@@ -6378,12 +6399,18 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
         Match Results
       </div>
 
+      <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
+
       <div style={{ marginBottom: 10 }}>
-        <LightSelect value={round} onChange={setRound} options={SCORE_ROUNDS.map((r) => ({ value: r, label: r }))} />
+        <LightSelect
+          value={round}
+          onChange={setRound}
+          options={(isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS).map((r) => ({ value: r, label: r }))}
+        />
       </div>
 
       <div style={{ fontSize: 10.5, color: "#A39C89", marginBottom: 14 }}>
-        {currentYear} · {course.name} · course handicaps shown are for {round} · sorted by progress
+        {yr.selectedYear} · {course.name} · course handicaps shown are for {round} · sorted by progress
       </div>
 
       {matches.length === 0 ? (
@@ -6530,10 +6557,104 @@ function PlayerRow({ name, handicap }) {
 // ---------------------------------------------------------------------------
 // Leaderboard tab
 // ---------------------------------------------------------------------------
+// Shared by Leaderboard, Matches, and Games — lets those (read-only)
+// screens browse any year, completely independent of the global "Current
+// Year" that Score entry writes against. Deliberately does NOT touch
+// SCORE_ROUNDS/ROUND_ID_BY_LABEL/ROUND_COURSE/ROUND_FLAGS (those drive
+// Score entry) — mutating those from a browsing screen would silently
+// redirect where a score gets saved if someone switched tabs mid-browse.
+function useYearRoundData(isLive, defaultYear) {
+  const [years, setYears] = useState([defaultYear]);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [rounds, setRounds] = useState([]); // [{label, id, courseId, countsForSolo, countsForTeam, countsForCarrollCup, appliesSkins, appliesPoker, appliesLowNet, appliesCtp}]
+  const [loading, setLoading] = useState(isLive);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!isLive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const events = await fetchEvents();
+        if (cancelled || events.length === 0) return;
+        setYears(events.map((e) => e.year).sort((a, b) => b - a));
+      } catch (err) {
+        console.error("Failed to load events:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive]);
+
+  useEffect(() => {
+    if (!isLive) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const event = await fetchEventByYear(selectedYear);
+        if (cancelled) return;
+        if (!event) {
+          setSelectedEventId(null);
+          setRounds([]);
+          return;
+        }
+        setSelectedEventId(event.id);
+        const dbRounds = await fetchRounds(event.id);
+        if (cancelled) return;
+        const sorted = [...dbRounds].sort((a, b) => (a.round_order ?? 0) - (b.round_order ?? 0));
+        setRounds(
+          sorted.map((r) => ({
+            label: r.label,
+            id: r.id,
+            courseId: r.course_id,
+            countsForSolo: r.counts_for_solo !== false,
+            countsForTeam: r.counts_for_team !== false,
+            countsForCarrollCup: r.counts_for_carroll_cup === true,
+            appliesSkins: r.applies_skins !== false,
+            appliesPoker: r.applies_poker !== false,
+            appliesLowNet: r.applies_low_net !== false,
+            appliesCtp: r.applies_ctp !== false,
+          }))
+        );
+      } catch (err) {
+        console.error("Failed to load rounds for year:", err);
+        setError(err.message || String(err));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, selectedYear]);
+
+  return { years, selectedYear, setSelectedYear, selectedEventId, rounds, loading, error };
+}
+
+function YearRoundPicker({ years, selectedYear, setSelectedYear }) {
+  if (years.length <= 1) return null;
+  return (
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 12 }}>
+      {years.map((y) => (
+        <YearPill key={y} label={String(y)} active={selectedYear === y} onClick={() => setSelectedYear(y)} />
+      ))}
+    </div>
+  );
+}
+
 function Leaderboard({ isLive, currentEventId, currentYear }) {
   const [mode, setMode] = useState("solo");
   const [scoreView, setScoreView] = useState("net"); // "net" | "gross" — Solo only
   const [displayUnit, setDisplayUnit] = useState("toPar"); // "toPar" | "strokes" — Solo only
+  const yr = useYearRoundData(isLive, currentYear);
+  const lastRoundLabel = yr.rounds.length > 0 ? yr.rounds[yr.rounds.length - 1].label : SCORE_ROUNDS[SCORE_ROUNDS.length - 1];
 
   return (
     <div style={{ padding: "18px 20px 24px" }}>
@@ -6541,8 +6662,10 @@ function Leaderboard({ isLive, currentEventId, currentYear }) {
         <span className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332" }}>
           Leaderboard
         </span>
-        <span style={{ fontSize: 11, color: "#8A8371" }}>through {SCORE_ROUNDS[SCORE_ROUNDS.length - 1]}</span>
+        <span style={{ fontSize: 11, color: "#8A8371" }}>through {lastRoundLabel}</span>
       </div>
+
+      <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
 
       <div className="bco-seg" style={{ marginBottom: 12 }}>
         <button className={`bco-seg-btn${mode === "solo" ? " active" : ""}`} onClick={() => setMode("solo")}>
@@ -6577,9 +6700,20 @@ function Leaderboard({ isLive, currentEventId, currentYear }) {
         </div>
       )}
 
-      {mode === "solo" && <SoloTable scoreView={scoreView} displayUnit={displayUnit} isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />}
-      {mode === "team" && <TeamTable isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />}
-      {mode === "carroll" && <CarrollCupTable isLive={isLive} currentEventId={currentEventId} />}
+      {isLive && yr.error && (
+        <div style={{ marginBottom: 12 }}>
+          <Banner tone="error">Couldn't load {yr.selectedYear} ({yr.error}) — showing local demo data instead.</Banner>
+        </div>
+      )}
+      {isLive && yr.loading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 12 }}>Loading {yr.selectedYear}…</div>}
+
+      {!yr.loading && mode === "solo" && (
+        <SoloTable scoreView={scoreView} displayUnit={displayUnit} isLive={isLive} currentEventId={yr.selectedEventId} currentYear={yr.selectedYear} roundsData={yr.rounds} />
+      )}
+      {!yr.loading && mode === "team" && (
+        <TeamTable isLive={isLive} currentEventId={yr.selectedEventId} currentYear={yr.selectedYear} roundsData={yr.rounds} />
+      )}
+      {!yr.loading && mode === "carroll" && <CarrollCupTable isLive={isLive} currentEventId={yr.selectedEventId} roundsData={yr.rounds} />}
 
       <div style={{ marginTop: 14, fontSize: 10.5, color: "#A39C89", lineHeight: 1.5 }}>
         {mode === "solo" &&
@@ -6593,11 +6727,16 @@ function Leaderboard({ isLive, currentEventId, currentYear }) {
   );
 }
 
-function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear }) {
+function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear, roundsData }) {
   // Omit a round's column entirely if its "Solo" checkbox is unchecked on
-  // Round setup. In offline/mock mode ROUND_FLAGS is empty, so nothing is
-  // filtered out — matches the mock data's fixed shape.
-  const rounds = SCORE_ROUNDS.filter((label) => ROUND_FLAGS[label]?.countsForSolo !== false);
+  // Round setup. Uses roundsData (this year's real rounds, resolved by
+  // Leaderboard's own year picker) rather than the global SCORE_ROUNDS —
+  // that global reflects whatever year Score entry is currently writing
+  // to, which may not be the year being browsed here. Offline/mock mode
+  // falls back to the mock shape.
+  const rounds = isLive
+    ? roundsData.filter((r) => r.countsForSolo).map((r) => r.label)
+    : SCORE_ROUNDS.filter((label) => ROUND_FLAGS[label]?.countsForSolo !== false);
   const [drilldown, setDrilldown] = useState(null); // { playerName, roundLabel } | null
   const [liveRows, setLiveRows] = useState(null); // null = use mock soloResults
   const [liveLoading, setLiveLoading] = useState(isLive);
@@ -6618,9 +6757,10 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
         ]);
         if (cancelled) return;
 
+        const localRoundIdByLabel = Object.fromEntries((roundsData || []).map((r) => [r.label, r.id]));
         const roundIdToLabel = {};
         rounds.forEach((label) => {
-          const id = ROUND_ID_BY_LABEL[label];
+          const id = localRoundIdByLabel[label];
           if (id) roundIdToLabel[id] = label;
         });
 
@@ -6631,12 +6771,12 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
             const myGross = grossTotals.filter((r) => r.player_id === s.player_id);
 
             const roundsNet = rounds.map((label) => {
-              const roundId = ROUND_ID_BY_LABEL[label];
+              const roundId = localRoundIdByLabel[label];
               const match = myNet.find((r) => r.round_id === roundId);
               return match ? match.net_to_par_total : null;
             });
             const roundsGross = rounds.map((label) => {
-              const roundId = ROUND_ID_BY_LABEL[label];
+              const roundId = localRoundIdByLabel[label];
               const match = myGross.find((r) => r.round_id === roundId);
               return match ? match.gross_to_par_total : null;
             });
@@ -6688,6 +6828,7 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
         roundLabel={drilldown.roundLabel}
         onBack={() => setDrilldown(null)}
         isLive={isLive}
+        roundsData={roundsData}
       />
     );
   }
@@ -6741,6 +6882,11 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
                 return currentRank;
               });
               const parForRound = (label) => {
+                if (isLive) {
+                  const r = (roundsData || []).find((rd) => rd.label === label);
+                  const course = r ? COURSES.find((c) => c.id === r.courseId) : null;
+                  return course ? course.holes.reduce((s, h) => s + h.par, 0) : 0;
+                }
                 const course = ROUND_COURSE[label];
                 return course ? course.holes.reduce((s, h) => s + h.par, 0) : 0;
               };
@@ -6998,10 +7144,11 @@ function ScorecardNine({ title, holes, totalLabel }) {
   );
 }
 
-function SoloRoundScorecard({ playerName, roundLabel, onBack, isLive }) {
+function SoloRoundScorecard({ playerName, roundLabel, onBack, isLive, roundsData }) {
   const player = PLAYERS.find((p) => p.name === playerName);
-  const course = ROUND_COURSE[roundLabel] || COURSES[0];
-  const roundId = ROUND_ID_BY_LABEL[roundLabel] || null;
+  const liveRound = isLive ? (roundsData || []).find((r) => r.label === roundLabel) : null;
+  const course = isLive ? (liveRound ? COURSES.find((c) => c.id === liveRound.courseId) : null) || COURSES[0] : ROUND_COURSE[roundLabel] || COURSES[0];
+  const roundId = isLive ? liveRound?.id || null : ROUND_ID_BY_LABEL[roundLabel] || null;
 
   const [liveHoles, setLiveHoles] = useState(null); // null = use mock generator
   const [liveLoading, setLiveLoading] = useState(isLive);
@@ -7100,10 +7247,13 @@ function SoloRoundScorecard({ playerName, roundLabel, onBack, isLive }) {
   );
 }
 
-function TeamTable({ isLive, currentEventId, currentYear }) {
+function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
   // Omit a round's column entirely if its "Team" checkbox is unchecked on
-  // Round setup.
-  const rounds = SCORE_ROUNDS.filter((label) => ROUND_FLAGS[label]?.countsForTeam !== false);
+  // Round setup. Uses roundsData (resolved by Leaderboard's own year
+  // picker), not the global SCORE_ROUNDS/ROUND_FLAGS.
+  const rounds = isLive
+    ? roundsData.filter((r) => r.countsForTeam).map((r) => r.label)
+    : SCORE_ROUNDS.filter((label) => ROUND_FLAGS[label]?.countsForTeam !== false);
   const [drilldown, setDrilldown] = useState(null); // { roundId, roundLabel, teamAId, teamBId, teamAName, teamBName } | null
   const [liveRows, setLiveRows] = useState(null); // null = use mock teamResults
   const [liveLoading, setLiveLoading] = useState(isLive);
@@ -7455,7 +7605,7 @@ function MatchScorecard({ isLive, roundId, roundLabel, matchupId, teamAName, tea
   );
 }
 
-function CarrollCupTable({ isLive, currentEventId }) {
+function CarrollCupTable({ isLive, currentEventId, roundsData }) {
   const [drilldown, setDrilldown] = useState(null); // round label | null
   const [drilldownMatches, setDrilldownMatches] = useState(null); // null = loading/mock
   const [drilldownLoading, setDrilldownLoading] = useState(false);
@@ -7506,35 +7656,29 @@ function CarrollCupTable({ isLive, currentEventId }) {
   const leader = standingsRows.reduce((a, b) => (b.points > a.points ? b : a));
 
   // Carroll Cup defaults to EXCLUDED unless a round is explicitly flagged
-  // (unlike Solo/Team, which default to included) — so unlike those two,
-  // this needs to distinguish "no live flag data yet" (offline/mock —
-  // show everything, same as before) from "live data says unchecked"
-  // (actually hide it).
-  const hasLiveFlags = Object.keys(ROUND_FLAGS).length > 0;
-  const roundRows = SCORE_ROUNDS.filter((label) => !hasLiveFlags || ROUND_FLAGS[label]?.countsForCarrollCup === true).map((label) => {
-    if (isRealData) {
-      const roundId = ROUND_ID_BY_LABEL[label];
-      const row = (liveRoundStandings || []).find((r) => r.round_id === roundId);
-      return {
-        label,
-        red: row ? Number(row.red_points) : 0,
-        blue: row ? Number(row.blue_points) : 0,
-        hasMatches: !!row,
-      };
-    }
-    const matches = CARROLL_CUP_MATCHES_BY_ROUND[label] || [];
-    return {
-      label,
-      red: matches.reduce((s, m) => s + m.redPoints, 0),
-      blue: matches.reduce((s, m) => s + m.bluePoints, 0),
-      hasMatches: matches.length > 0,
-    };
-  });
+  // (unlike Solo/Team, which default to included).
+  const roundRows = isLive
+    ? roundsData
+        .filter((r) => r.countsForCarrollCup)
+        .map((r) => {
+          const row = (liveRoundStandings || []).find((rs) => rs.round_id === r.id);
+          return { label: r.label, id: r.id, red: row ? Number(row.red_points) : 0, blue: row ? Number(row.blue_points) : 0, hasMatches: !!row };
+        })
+    : SCORE_ROUNDS.filter((label) => ROUND_FLAGS[label]?.countsForCarrollCup === true || Object.keys(ROUND_FLAGS).length === 0).map((label) => {
+        const matches = CARROLL_CUP_MATCHES_BY_ROUND[label] || [];
+        return {
+          label,
+          id: null,
+          red: matches.reduce((s, m) => s + m.redPoints, 0),
+          blue: matches.reduce((s, m) => s + m.bluePoints, 0),
+          hasMatches: matches.length > 0,
+        };
+      });
 
-  const openDrilldown = async (label) => {
-    setDrilldown(label);
+  const openDrilldown = async (roundRow) => {
+    setDrilldown(roundRow.label);
     if (!isRealData) return;
-    const roundId = ROUND_ID_BY_LABEL[label];
+    const roundId = roundRow.id;
     if (!roundId) {
       setDrilldownMatches([]);
       return;
@@ -7677,7 +7821,7 @@ function CarrollCupTable({ isLive, currentEventId }) {
             <tr key={r.label}>
               <td>
                 <button
-                  onClick={() => openDrilldown(r.label)}
+                  onClick={() => openDrilldown(r)}
                   className="bco-mono"
                   style={{ fontSize: 13, fontWeight: 600, color: "#2C2A22", border: "none", background: "none", cursor: "pointer", padding: "4px 0" }}
                 >
