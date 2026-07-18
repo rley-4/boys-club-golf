@@ -26,6 +26,8 @@ import {
   savePokerWinner,
   fetchLowNetSolo,
   fetchLowNetTeam,
+  fetchLowNetSoloPayout,
+  fetchLowNetTeamPayout,
   fetchCtpResults,
   saveCtpResult,
   deleteCtpResult,
@@ -45,6 +47,17 @@ import {
   fetchGameSettings,
   upsertGameSettings,
   fetchRounds,
+  fetchPlayerYearPayouts,
+  fetchCtpPayout,
+  fetchCompetitionSettings,
+  upsertCompetitionSettings,
+  fetchCompetitionPayoutPlaces,
+  upsertCompetitionPayoutPlace,
+  deleteCompetitionPayoutPlace,
+  fetchCompetitionPayouts,
+  fetchGrandTotalPayouts,
+  fetchSoloTiebreakDetail,
+  fetchTeamTiebreakDetail,
   updatePlayer,
   fetchPlayerRoles,
   updatePlayerRole,
@@ -73,7 +86,7 @@ import {
   fetchCarrollCupRoster,
   upsertCarrollCupAssignment,
 } from "./lib/api.js";
-import { Flag, Trophy, Coins, MoreHorizontal, BookOpen, ChevronRight, ChevronLeft, Swords } from "lucide-react";
+import { Flag, Trophy, Coins, MoreHorizontal, BookOpen, ChevronRight, ChevronLeft, Swords, User, Calendar, Users, Import, Upload } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Courses. In the real app this comes from a `courses` table (name, rating,
@@ -841,6 +854,34 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
   const [liveMatchups, setLiveMatchups] = useState(null); // null = use mock MATCHES_BY_ROUND
   const [liveCarrollRoster, setLiveCarrollRoster] = useState(null); // null = use mock CARROLL_CUP_ROSTER_DEFAULT
 
+  // Who's competing in whichever year is selected here — NOT the global
+  // Current Year's .competing flag, since this screen has its own
+  // independent year picker now. Using the global flag would show players
+  // who didn't actually play the year being browsed.
+  const [competedByPlayer, setCompetedByPlayer] = useState({}); // playerId -> [eventId, ...]
+
+  useEffect(() => {
+    if (!isLive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchAllPlayerCompetedYears();
+        if (cancelled) return;
+        const map = {};
+        rows.forEach((r) => {
+          if (!map[r.player_id]) map[r.player_id] = [];
+          map[r.player_id].push(r.event_id);
+        });
+        setCompetedByPlayer(map);
+      } catch (err) {
+        console.error("Failed to load players' competed years:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive]);
+
   // Keep the selected round valid whenever the selected year's rounds load
   // or the year changes.
   useEffect(() => {
@@ -948,7 +989,10 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
 
   const totalPar = useMemo(() => course.holes.reduce((s, h) => s + h.par, 0), [course]);
 
-  const activePlayers = useMemo(() => PLAYERS.filter((p) => p.competing !== false), []);
+  const activePlayers = useMemo(() => {
+    if (!isLive || !yr.selectedEventId) return PLAYERS.filter((p) => p.competing !== false);
+    return PLAYERS.filter((p) => (competedByPlayer[p.id] || []).includes(yr.selectedEventId));
+  }, [isLive, yr.selectedEventId, competedByPlayer]);
   const player = PLAYERS.find((p) => p.id === Number(selectedPlayerId)) || null;
   const storeKey = player ? `${yr.selectedYear}-${selectedRound}-${player.id}` : null;
   const record = storeKey ? scoresStore[storeKey] : null;
@@ -1678,8 +1722,6 @@ const GAME_MODES = [
   { key: "lownet", label: "Low Net" },
 ];
 
-const CTP_COURSE = COURSES[0]; // TODO: derive from the course actually assigned to the selected round
-const CTP_HOLES = CTP_COURSE.holes.filter((h) => h.par === 3);
 
 // Buy-in and pot settings will live on the Admin page once that's built —
 // hardcoded here so Skins can show a real rollup in the meantime.
@@ -1712,7 +1754,7 @@ const LOW_NET_SOLO_PREVIEW = [
 function GameNotApplicable({ round, game }) {
   return (
     <div style={{ padding: "24px 12px", textAlign: "center" }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "#6B6455" }}>{game} isn't played in {round}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "#6B6455" }}>No {game} for {round}</div>
       <div style={{ fontSize: 11.5, color: "#B4AE9E", marginTop: 4 }}>Set on Admin → Round setup, per round.</div>
     </div>
   );
@@ -1737,6 +1779,9 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
   const flags = isLive
     ? liveRound || { appliesPoker: true, appliesSkins: true, appliesCtp: true, appliesLowNet: true }
     : ROUND_FLAGS[round] || {};
+  // The round's actual course, for CTP's par-3 holes — not a fixed course
+  // regardless of what's actually being played.
+  const course = isLive ? (liveRound ? COURSES.find((c) => c.id === liveRound.courseId) : null) || COURSES[0] : ROUND_COURSE[round] || COURSES[0];
 
   return (
     <div>
@@ -1784,7 +1829,7 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
           (flags.appliesCtp === false ? (
             <GameNotApplicable round={round} game="CTP" />
           ) : (
-            <CtpPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} />
+            <CtpPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} course={course} />
           ))}
         {mode === "lownet" &&
           (flags.appliesLowNet === false ? (
@@ -1943,7 +1988,11 @@ function PokerPanel({ round, year, isLive, roundId }) {
                   <div style={{ fontSize: 10.5, color: "#8A8371" }}>Winner</div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: "#1B4332" }}>{winnerName}</div>
                   <div className="bco-mono" style={{ fontSize: 13, color: "#6B6455", marginTop: 2 }}>
-                    ${Number(livePayout.pot).toFixed(2)} pot ({livePayout.total_three_putts} three-putts)
+                    ${Number(livePayout.pot).toFixed(2)} pot
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "#8A8371", marginTop: 3 }}>
+                    ${Number(livePayout.buy_in_pot).toFixed(2)} buy-ins ({livePayout.participants} players) + $
+                    {Number(livePayout.three_putt_pot).toFixed(2)} three-putt penalties ({livePayout.total_three_putts})
                   </div>
                 </div>
               ) : (
@@ -2131,14 +2180,18 @@ function SkinsPanel({ round, year, isLive, roundId }) {
   );
 }
 
-function CtpPanel({ round, year, isLive, roundId, currentEventId }) {
+function CtpPanel({ round, year, isLive, roundId, currentEventId, course }) {
   const [winners, setWinners] = useState({}); // live: { holeNumber: playerId } scoped to roundId. offline: { "year-round-hole": playerId }
   const [draft, setDraft] = useState({}); // { hole: playerId } — pending edits before Save all
   const [saved, setSaved] = useState(false);
   const [liveLoading, setLiveLoading] = useState(isLive);
   const [liveError, setLiveError] = useState(null);
   const [saveError, setSaveError] = useState(false);
-  const [ctpPrize, setCtpPrize] = useState(null);
+  const [payout, setPayout] = useState(null); // { ctp_buy_in, participants, par3_holes, total_pot, value_per_hole }
+
+  // This round's actual par-3 holes — not assumed to be a fixed course or
+  // a fixed count of 4.
+  const ctpHoles = (course || COURSES[0]).holes.filter((h) => h.par === 3);
 
   useEffect(() => {
     setDraft({});
@@ -2152,14 +2205,14 @@ function CtpPanel({ round, year, isLive, roundId, currentEventId }) {
     setLiveLoading(true);
     (async () => {
       try {
-        const [results, gs] = await Promise.all([fetchCtpResults(roundId), currentEventId ? fetchGameSettings(currentEventId) : null]);
+        const [results, payoutData] = await Promise.all([fetchCtpResults(roundId), fetchCtpPayout(roundId)]);
         if (cancelled) return;
         const map = {};
         results.forEach((r) => {
           map[r.hole_number] = r.player_id;
         });
         setWinners(map);
-        if (gs) setCtpPrize(Number(gs.ctp_prize));
+        setPayout(payoutData);
       } catch (err) {
         console.error("Failed to load CTP results:", err);
         setLiveError(err.message || String(err));
@@ -2237,12 +2290,20 @@ function CtpPanel({ round, year, isLive, roundId, currentEventId }) {
       {!liveLoading && (
         <>
           <div style={{ fontSize: 11.5, color: "#8A8371", marginBottom: 10 }}>
-            Par 3s on {CTP_COURSE.name}. Set every winner, then save once.
-            {ctpPrize != null && ` $${ctpPrize}/hole.`}
+            Par 3s on {(course || COURSES[0]).name}. Set every winner, then save once.
+            {payout != null && payout.value_per_hole != null && ` $${Number(payout.value_per_hole).toFixed(2)}/hole.`}
           </div>
 
+          {payout != null && (
+            <div style={{ fontSize: 10.5, color: "#8A8371", marginBottom: 10, lineHeight: 1.5 }}>
+              ${Number(payout.ctp_buy_in).toFixed(2)}/player × {payout.participants} players = $
+              {Number(payout.total_pot).toFixed(2)} pot, split across {payout.par3_holes} par-3 hole
+              {payout.par3_holes === 1 ? "" : "s"}.
+            </div>
+          )}
+
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {CTP_HOLES.map((h) => (
+            {ctpHoles.map((h) => (
               <div
                 key={h.number}
                 style={{
@@ -2340,28 +2401,36 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
     let cancelled = false;
     (async () => {
       try {
-        const [lowNetSolo, grossTotals, lowNetTeam, dbTeams, gs] = await Promise.all([
+        const [lowNetSolo, grossTotals, lowNetTeam, dbTeams, gs, soloPayout, teamPayout] = await Promise.all([
           fetchLowNetSolo(roundId),
           fetchSoloRoundGrossTotals(currentEventId),
           fetchLowNetTeam(roundId),
           fetchTeams(currentEventId),
           fetchGameSettings(currentEventId),
+          fetchLowNetSoloPayout(roundId),
+          fetchLowNetTeamPayout(roundId),
         ]);
         if (cancelled) return;
 
+        const soloPayoutMap = Object.fromEntries(soloPayout.map((p) => [p.player_id, Number(p.amount)]));
         const soloRows = lowNetSolo
           .map((s) => ({
             name: PLAYERS.find((p) => p.id === s.player_id)?.name || `Player ${s.player_id}`,
             net: s.net_total,
             gross: grossTotals.find((g) => g.round_id === roundId && g.player_id === s.player_id)?.gross_total ?? null,
+            payout: soloPayoutMap[s.player_id] ?? 0,
           }))
           .sort((a, b) => a.net - b.net);
         setLiveSolo(soloRows);
 
+        const teamPayoutMap = Object.fromEntries(teamPayout.map((p) => [p.player_id, Number(p.amount)]));
         const teamRows = lowNetTeam
           .map((t) => {
             const teamMeta = dbTeams.find((dt) => dt.id === t.team_id);
-            return { name: teamMeta?.name || `Team ${t.team_id}`, net: t.net_total };
+            const teamPayoutTotal = [teamMeta?.player_a_id, teamMeta?.player_b_id]
+              .filter((id) => id != null)
+              .reduce((sum, id) => sum + (teamPayoutMap[id] ?? 0), 0);
+            return { name: teamMeta?.name || `Team ${t.team_id}`, net: t.net_total, payout: teamPayoutTotal };
           })
           .sort((a, b) => a.net - b.net);
         setLiveTeam(teamRows);
@@ -2423,7 +2492,8 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
                   <tr>
                     <th>Player</th>
                     <th style={{ textAlign: "center" }}>Gross</th>
-                    <th style={{ textAlign: "right" }}>Net</th>
+                    <th style={{ textAlign: "center" }}>Net</th>
+                    <th style={{ textAlign: "right" }}>Payout</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2436,8 +2506,11 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
                       <td className="bco-mono" style={{ textAlign: "center", fontSize: 13, color: "#8A8371" }}>
                         {p.gross ?? "–"}
                       </td>
-                      <td className="bco-mono" style={{ textAlign: "right", fontSize: 14, fontWeight: 600, color: "#1B4332" }}>
+                      <td className="bco-mono" style={{ textAlign: "center", fontSize: 14, fontWeight: 600, color: "#1B4332" }}>
                         {p.net}
+                      </td>
+                      <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: p.payout > 0 ? 600 : 400, color: p.payout > 0 ? "#1B4332" : "#B4AE9E" }}>
+                        {p.payout > 0 ? `$${p.payout.toFixed(2)}` : "–"}
                       </td>
                     </tr>
                   ))}
@@ -2446,7 +2519,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
             )
           ) : teamRows == null ? (
             <div style={{ fontSize: 12.5, color: "#B4AE9E", textAlign: "center", padding: "24px 12px" }}>
-              Team low net (2-man net best ball) coming next — same layout, paired by team instead of by player.
+              No completed team rounds yet for {round}.
             </div>
           ) : teamRows.length === 0 ? (
             <div style={{ fontSize: 12.5, color: "#B4AE9E", textAlign: "center", padding: "24px 12px" }}>
@@ -2457,7 +2530,8 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
               <thead>
                 <tr>
                   <th>Team</th>
-                  <th style={{ textAlign: "right" }}>Net</th>
+                  <th style={{ textAlign: "center" }}>Net</th>
+                  <th style={{ textAlign: "right" }}>Payout</th>
                 </tr>
               </thead>
               <tbody>
@@ -2467,8 +2541,11 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
                       {t.name}
                       {i === 0 && <span style={{ fontSize: 10, color: "#6FAE8C", marginLeft: 6 }}>● low</span>}
                     </td>
-                    <td className="bco-mono" style={{ textAlign: "right", fontSize: 14, fontWeight: 600, color: "#1B4332" }}>
+                    <td className="bco-mono" style={{ textAlign: "center", fontSize: 14, fontWeight: 600, color: "#1B4332" }}>
                       {t.net}
+                    </td>
+                    <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: t.payout > 0 ? 600 : 400, color: t.payout > 0 ? "#1B4332" : "#B4AE9E" }}>
+                      {t.payout > 0 ? `$${t.payout.toFixed(2)} total (both players)` : "–"}
                     </td>
                   </tr>
                 ))}
@@ -2552,39 +2629,52 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
   if (view === "courses") {
     return <CoursesScreen onBack={() => setView("menu")} isLive={isLive} />;
   }
-  if (view === "admin") {
-    return <AdminMenu onBack={() => setView("menu")} onNavigate={setView} />;
+  if (view === "admin-setup") {
+    return <AdminSetupMenu onBack={() => setView("menu")} onNavigate={setView} />;
+  }
+  if (view === "admin-results") {
+    return <AdminResultsMenu onBack={() => setView("menu")} onNavigate={setView} />;
   }
   if (view === "admin-import") {
-    return <ImportResults onBack={() => setView("admin")} isLive={isLive} />;
+    return <ImportResults onBack={() => setView("admin-results")} isLive={isLive} />;
   }
   if (view === "admin-export") {
-    return <ExportResults onBack={() => setView("admin")} isLive={isLive} currentEventId={currentEventId} />;
+    return <ExportResults onBack={() => setView("admin-results")} isLive={isLive} currentEventId={currentEventId} />;
   }
   if (view === "admin-general") {
-    return <YearSettings onBack={() => setView("admin")} currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} />;
+    return <YearSettings onBack={() => setView("admin-setup")} currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} />;
   }
   if (view === "admin-roles") {
-    return <RolesSettings onBack={() => setView("admin")} isLive={isLive} />;
+    return <RolesSettings onBack={() => setView("admin-setup")} isLive={isLive} />;
   }
   if (view === "admin-teams") {
-    return <TeamSetupSettings onBack={() => setView("admin")} isLive={isLive} currentYear={currentYear} />;
+    return <TeamSetupSettings onBack={() => setView("admin-setup")} isLive={isLive} currentYear={currentYear} />;
   }
   if (view === "admin-rounds") {
-    return <RoundSetupSettings onBack={() => setView("admin")} isLive={isLive} currentYear={currentYear} refreshRoundMap={refreshRoundMap} />;
+    return <RoundSetupSettings onBack={() => setView("admin-setup")} isLive={isLive} currentYear={currentYear} refreshRoundMap={refreshRoundMap} />;
   }
   if (view === "admin-matchups") {
-    return <MatchupSetupSettings onBack={() => setView("admin")} isLive={isLive} currentYear={currentYear} />;
+    return <MatchupSetupSettings onBack={() => setView("admin-setup")} isLive={isLive} currentYear={currentYear} />;
   }
-  if (view === "admin-games") {
-    return <GameSettings onBack={() => setView("admin")} isLive={isLive} currentYear={currentYear} />;
+  if (view === "admin-games-setup") {
+    return <GamesSetupSettings onBack={() => setView("admin-setup")} isLive={isLive} currentYear={currentYear} />;
+  }
+  if (view === "admin-games-results") {
+    return <GamesResultsSettings onBack={() => setView("admin-results")} isLive={isLive} currentYear={currentYear} />;
+  }
+  if (view === "admin-competitions-setup") {
+    return <CompetitionSetupSettings onBack={() => setView("admin-setup")} isLive={isLive} currentYear={currentYear} />;
+  }
+  if (view === "admin-competitions-results") {
+    return <CompetitionResultsSettings onBack={() => setView("admin-results")} isLive={isLive} currentYear={currentYear} />;
   }
 
   const MENU_ITEMS = [
     { key: "recordbook", label: "Record Book", note: "All-time solo and team stats", icon: BookOpen, enabled: true },
     { key: "players", label: "Players", note: "Roster, bios, and handicap indexes", icon: Flag, enabled: true },
     { key: "courses", label: "Courses", note: "Course-tees and hole-by-hole data", icon: Trophy, enabled: true },
-    { key: "admin", label: "Admin", note: "Imports, exports, and event settings", icon: MoreHorizontal, enabled: isAdmin },
+    { key: "admin-setup", label: "Admin Setup", note: "Roles, years, tournament, and money setup", icon: MoreHorizontal, enabled: isAdmin },
+    { key: "admin-results", label: "Admin Results", note: "Computed payouts, plus import/export", icon: MoreHorizontal, enabled: isAdmin },
   ];
 
   return (
@@ -2619,7 +2709,7 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "#2C2A22" }}>{item.label}</div>
                 <div style={{ fontSize: 11, color: "#8A8371", marginTop: 1 }}>
-                  {item.enabled ? item.note : item.key === "admin" ? "Organizer only" : `${item.note} — coming soon`}
+                  {item.enabled ? item.note : item.key.startsWith("admin") ? "Organizer only" : `${item.note} — coming soon`}
                 </div>
               </div>
               {item.enabled && <ChevronRight size={16} color="#B9B3A2" />}
@@ -2658,67 +2748,112 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
 // ---------------------------------------------------------------------------
 // Admin menu — Import/Export, Event settings, and Game settings are real.
 // ---------------------------------------------------------------------------
-function AdminMenu({ onBack, onNavigate }) {
-  const ADMIN_ITEMS = [
-    { key: "admin-import", label: "Import results", note: "Upload a CSV of historical scores", icon: BookOpen, enabled: true },
-    { key: "admin-export", label: "Export results", note: "Download scores and payouts as CSV", icon: BookOpen, enabled: true },
-    { key: "admin-general", label: "Year settings", note: "Every year on record and rounds played", icon: Trophy, enabled: true },
-    { key: "admin-roles", label: "Roles", note: "Access levels and player role assignment", icon: Flag, enabled: true },
-    { key: "admin-teams", label: "Team setup", note: "Team pairs and Carroll Cup assignments", icon: Flag, enabled: true },
-    { key: "admin-rounds", label: "Round setup", note: "Course, and what each round counts toward", icon: Trophy, enabled: true },
-    { key: "admin-matchups", label: "Matchup setup", note: "Team pairings per round, per competition", icon: Swords, enabled: true },
-    { key: "admin-games", label: "Game settings", note: "Buy-ins for Skins, Poker, Low Net, CTP", icon: Coins, enabled: true },
-  ];
+// lucide-react has no golf-specific icon — this matches its stroke style
+// (24x24, round caps/joins) closely enough to sit next to the real ones.
+function GolfClubIcon({ size = 18, strokeWidth = 1.8, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 3 L8 18" />
+      <path d="M8 18 L12.5 20 L10.5 15.3 Z" />
+      <circle cx="5.5" cy="20.5" r="1.4" fill={color} stroke="none" />
+    </svg>
+  );
+}
 
+function AdminIconButton({ label, icon: Icon, onClick, enabled = true }) {
+  return (
+    <button
+      onClick={() => enabled && onClick()}
+      disabled={!enabled}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+        width: 82,
+        padding: "12px 6px",
+        background: "#FFFFFF",
+        border: "1px solid #E4DFCE",
+        borderRadius: 12,
+        cursor: enabled ? "pointer" : "default",
+        opacity: enabled ? 1 : 0.45,
+        fontFamily: "'Inter', sans-serif",
+      }}
+    >
+      <div style={{ width: 38, height: 38, borderRadius: 10, background: "#DCEFE3", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon size={19} strokeWidth={1.8} color="#1B4332" />
+      </div>
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: "#2C2A22", textAlign: "center", lineHeight: 1.25 }}>{label}</div>
+    </button>
+  );
+}
+
+function AdminIconRow({ title, children }) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: "#8A8371", letterSpacing: "0.04em", marginBottom: 10, textTransform: "uppercase" }}>{title}</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{children}</div>
+    </div>
+  );
+}
+
+function AdminSetupMenu({ onBack, onNavigate }) {
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 18 }}>
         <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to More">
           <ChevronLeft size={18} />
         </button>
         <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Admin
+          Admin setup
         </span>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {ADMIN_ITEMS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.key}
-              onClick={() => item.enabled && onNavigate(item.key)}
-              disabled={!item.enabled}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                width: "100%",
-                textAlign: "left",
-                background: "#FFFFFF",
-                border: "1px solid #E4DFCE",
-                borderRadius: 12,
-                padding: "13px 14px",
-                cursor: item.enabled ? "pointer" : "default",
-                opacity: item.enabled ? 1 : 0.45,
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
-              <Icon size={18} strokeWidth={1.8} color="#1B4332" />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "#2C2A22" }}>{item.label}</div>
-                <div style={{ fontSize: 11, color: "#8A8371", marginTop: 1 }}>
-                  {item.enabled ? item.note : `${item.note} — coming soon`}
-                </div>
-              </div>
-              {item.enabled && <ChevronRight size={16} color="#B9B3A2" />}
-            </button>
-          );
-        })}
-      </div>
+      <AdminIconRow title="General setup">
+        <AdminIconButton label="Roles" icon={User} onClick={() => onNavigate("admin-roles")} />
+        <AdminIconButton label="Years" icon={Calendar} onClick={() => onNavigate("admin-general")} />
+      </AdminIconRow>
+
+      <AdminIconRow title="Tournament setup">
+        <AdminIconButton label="Round setup" icon={GolfClubIcon} onClick={() => onNavigate("admin-rounds")} />
+        <AdminIconButton label="Team setup" icon={Users} onClick={() => onNavigate("admin-teams")} />
+        <AdminIconButton label="Matchup setup" icon={Swords} onClick={() => onNavigate("admin-matchups")} />
+      </AdminIconRow>
+
+      <AdminIconRow title="Money setup">
+        <AdminIconButton label="Competition setup" icon={Trophy} onClick={() => onNavigate("admin-competitions-setup")} />
+        <AdminIconButton label="Games setup" icon={Coins} onClick={() => onNavigate("admin-games-setup")} />
+      </AdminIconRow>
     </div>
   );
 }
+
+function AdminResultsMenu({ onBack, onNavigate }) {
+  return (
+    <div style={{ padding: "14px 20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 18 }}>
+        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to More">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
+          Admin results
+        </span>
+      </div>
+
+      <AdminIconRow title="Results data">
+        <AdminIconButton label="Competition results" icon={Trophy} onClick={() => onNavigate("admin-competitions-results")} />
+        <AdminIconButton label="Games results" icon={Coins} onClick={() => onNavigate("admin-games-results")} />
+      </AdminIconRow>
+
+      <AdminIconRow title="Bulk data">
+        <AdminIconButton label="Import" icon={Import} onClick={() => onNavigate("admin-import")} />
+        <AdminIconButton label="Export" icon={Upload} onClick={() => onNavigate("admin-export")} />
+      </AdminIconRow>
+    </div>
+  );
+}
+
+
 
 function FormSelect({ value, onChange, options }) {
   return (
@@ -4000,7 +4135,7 @@ function AddRowButton({ label, onClick }) {
 // ---------------------------------------------------------------------------
 // Game settings — buy-ins and pots for the daily cash games.
 // ---------------------------------------------------------------------------
-function GameSettings({ onBack, isLive, currentYear }) {
+function GamesSetupSettings({ onBack, isLive, currentYear }) {
   const DEFAULTS = {
     skinsBuyIn: SKINS_SETTINGS.buyInPerPlayer,
     pokerBuyIn: 5,
@@ -4013,6 +4148,7 @@ function GameSettings({ onBack, isLive, currentYear }) {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [settings, setSettings] = useState(DEFAULTS);
+  const [roundsForYear, setRoundsForYear] = useState([]);
   const [liveLoading, setLiveLoading] = useState(isLive);
   const [liveError, setLiveError] = useState(null);
   const [saveStatus, setSaveStatus] = useState(null); // null | "saving" | "saved" | "error"
@@ -4034,6 +4170,8 @@ function GameSettings({ onBack, isLive, currentYear }) {
     };
   }, [isLive]);
 
+  // Setup only touches game_settings and the round-applicability flags —
+  // no payout aggregation, so it never has to wait on that (Results does).
   useEffect(() => {
     if (!isLive) {
       setLiveLoading(false);
@@ -4053,8 +4191,9 @@ function GameSettings({ onBack, isLive, currentYear }) {
           return;
         }
         setSelectedEventId(event.id);
-        const gs = await fetchGameSettings(event.id);
+        const [gs, rounds] = await Promise.all([fetchGameSettings(event.id), fetchRounds(event.id)]);
         if (cancelled) return;
+        setRoundsForYear(rounds);
         setSettings(
           gs
             ? {
@@ -4097,6 +4236,16 @@ function GameSettings({ onBack, isLive, currentYear }) {
     }
   };
 
+  // Illustrative only — buy-in x number of applicable rounds. The actual
+  // per-player payout math (on Games Results) is participant-weighted per
+  // round, since not everyone necessarily plays every round; this is just
+  // a quick "roughly how big is this pool" figure for the admin.
+  const totalRounds = roundsForYear.length;
+  const skinsRounds = roundsForYear.filter((r) => r.applies_skins).length;
+  const pokerRounds = roundsForYear.filter((r) => r.applies_poker).length;
+  const lowNetRounds = roundsForYear.filter((r) => r.applies_low_net).length;
+  const ctpRounds = roundsForYear.filter((r) => r.applies_ctp).length;
+
   return (
     <div style={{ padding: "14px 20px 24px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
@@ -4104,7 +4253,7 @@ function GameSettings({ onBack, isLive, currentYear }) {
           <ChevronLeft size={18} />
         </button>
         <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Game settings
+          Games setup
         </span>
       </div>
 
@@ -4116,7 +4265,7 @@ function GameSettings({ onBack, isLive, currentYear }) {
 
       <AutoComputedNote>
         These drive the pot math shown on Games for {selectedYear} (Skins and Poker payouts read this directly; Low
-        Net and CTP show it as context).
+        Net and CTP show it as context). Results (who actually won what) lives on Games Results.
       </AutoComputedNote>
 
       {isLive && liveError && (
@@ -4140,6 +4289,12 @@ function GameSettings({ onBack, isLive, currentYear }) {
         <FormField label="Buy-in per player ($)">
           <FormInput type="number" value={settings.skinsBuyIn} onChange={(v) => update("skinsBuyIn", v)} />
         </FormField>
+        {isLive && totalRounds > 0 && (
+          <div style={{ fontSize: 10.5, color: "#8A8371", marginTop: 8 }}>
+            Applies to {skinsRounds} of {totalRounds} rounds this year — roughly ${(settings.skinsBuyIn * skinsRounds).toFixed(2)}/player
+            in buy-ins across the year (actual pot per round also depends on how many played).
+          </div>
+        )}
       </SettingsSection>
 
       <SettingsSection title="Putting Poker">
@@ -4151,6 +4306,12 @@ function GameSettings({ onBack, isLive, currentYear }) {
             <FormInput type="number" value={settings.pokerThreePuttPenalty} onChange={(v) => update("pokerThreePuttPenalty", v)} />
           </FormField>
         </div>
+        {isLive && totalRounds > 0 && (
+          <div style={{ fontSize: 10.5, color: "#8A8371", marginTop: 8 }}>
+            Applies to {pokerRounds} of {totalRounds} rounds this year. Pot per round is buy-ins + 3-putt penalties, so
+            it varies with actual putting — see Games for each round's real pot.
+          </div>
+        )}
       </SettingsSection>
 
       <SettingsSection title="Low Net" description="Both are per-player buy-ins — a team's pot is the team buy-in × 2, since it's paid in by each player individually.">
@@ -4162,12 +4323,25 @@ function GameSettings({ onBack, isLive, currentYear }) {
             <FormInput type="number" value={settings.lowNetTeamBuyIn} onChange={(v) => update("lowNetTeamBuyIn", v)} />
           </FormField>
         </div>
+        {isLive && totalRounds > 0 && (
+          <div style={{ fontSize: 10.5, color: "#8A8371", marginTop: 8 }}>
+            Applies to {lowNetRounds} of {totalRounds} rounds this year.
+          </div>
+        )}
       </SettingsSection>
 
-      <SettingsSection title="Closest to Pin">
-        <FormField label="Prize per hole ($)">
+      <SettingsSection
+        title="Closest to Pin"
+        description="Buy-in is per player, per round — the pot (buy-in × players who played that round) splits evenly across however many par-3 holes that round's actual course has."
+      >
+        <FormField label="Buy-in per player, per round ($)">
           <FormInput type="number" value={settings.ctpPrize} onChange={(v) => update("ctpPrize", v)} />
         </FormField>
+        {isLive && totalRounds > 0 && (
+          <div style={{ fontSize: 10.5, color: "#8A8371", marginTop: 8 }}>
+            Applies to {ctpRounds} of {totalRounds} rounds this year.
+          </div>
+        )}
       </SettingsSection>
 
       {saveStatus === "saved" && (
@@ -4186,6 +4360,628 @@ function GameSettings({ onBack, isLive, currentYear }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Games results — the expensive part (payout aggregation across all four
+// games). Kept on its own screen so Setup never has to wait on it.
+// ---------------------------------------------------------------------------
+function GamesResultsSettings({ onBack, isLive, currentYear }) {
+  const [years, setYears] = useState([currentYear]);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [payouts, setPayouts] = useState([]);
+  const [liveLoading, setLiveLoading] = useState(isLive);
+  const [liveError, setLiveError] = useState(null);
+
+  useEffect(() => {
+    if (!isLive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const events = await fetchEvents();
+        if (cancelled || events.length === 0) return;
+        setYears(events.map((e) => e.year).sort((a, b) => b - a));
+      } catch (err) {
+        console.error("Failed to load events:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive]);
+
+  useEffect(() => {
+    if (!isLive) {
+      setLiveLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLiveLoading(true);
+    setLiveError(null);
+    (async () => {
+      try {
+        const event = await fetchEventByYear(selectedYear);
+        if (cancelled) return;
+        if (!event) {
+          setSelectedEventId(null);
+          setPayouts([]);
+          return;
+        }
+        setSelectedEventId(event.id);
+        const payoutRows = await fetchPlayerYearPayouts(event.id);
+        if (cancelled) return;
+        setPayouts(payoutRows);
+      } catch (err) {
+        console.error("Failed to load game payouts:", err);
+        setLiveError(err.message || String(err));
+      } finally {
+        if (!cancelled) setLiveLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, selectedYear]);
+
+  return (
+    <div style={{ padding: "14px 20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
+        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
+          Games results
+        </span>
+      </div>
+
+      <SettingsSection title="Year">
+        <FormField label="Year">
+          <FormSelect value={selectedYear} onChange={(v) => setSelectedYear(Number(v))} options={years.map((y) => ({ value: y, label: String(y) }))} />
+        </FormField>
+      </SettingsSection>
+
+      <AutoComputedNote>
+        Computed live from actual results across all four games — nothing to update by hand. Buy-ins assume anyone
+        who logged a score for a round bought into every game flagged applicable for it that round. Buy-in amounts
+        are set on Games Setup.
+      </AutoComputedNote>
+
+      {isLive && liveError && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner tone="error">Couldn't load game payouts ({liveError}).</Banner>
+        </div>
+      )}
+      {isLive && liveLoading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 14 }}>Loading…</div>}
+      {!isLive && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner tone="error">Not connected to Supabase.</Banner>
+        </div>
+      )}
+
+      {!liveLoading && (
+        <SettingsSection title={`Player payouts — ${selectedYear}`}>
+          {!isLive ? (
+            <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>Connect to Supabase to see payouts.</div>
+          ) : payouts.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No results recorded yet for {selectedYear}.</div>
+          ) : (
+            <table className="bco-table">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th style={{ textAlign: "right" }}>Buy-ins</th>
+                  <th style={{ textAlign: "right" }}>Winnings</th>
+                  <th style={{ textAlign: "right" }}>Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payouts
+                  .map((p) => ({ ...p, name: PLAYERS.find((pl) => pl.id === p.player_id)?.name || `Player ${p.player_id}` }))
+                  .sort((a, b) => b.net - a.net)
+                  .map((p) => (
+                    <tr key={p.player_id}>
+                      <td style={{ fontSize: 13, fontWeight: 500, color: "#2C2A22" }}>{p.name}</td>
+                      <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
+                        ${Number(p.total_buy_ins).toFixed(2)}
+                      </td>
+                      <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
+                        ${Number(p.total_winnings).toFixed(2)}
+                      </td>
+                      <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: Number(p.net) >= 0 ? "#1B4332" : "#A3492E" }}>
+                        {Number(p.net) >= 0 ? "+" : ""}
+                        ${Number(p.net).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
+        </SettingsSection>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Competition payouts — season-long Solo/Team/Carroll Cup buy-ins and
+// place-based payouts, separate from the per-round game payouts above.
+// ---------------------------------------------------------------------------
+const COMPETITION_LABELS = { solo: "Solo", team: "Team", carroll_cup: "Carroll Cup" };
+
+function CompetitionSetupSettings({ onBack, isLive, currentYear }) {
+  const [years, setYears] = useState([currentYear]);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [settings, setSettings] = useState({ soloBuyIn: 0, teamBuyIn: 0, carrollCupBuyIn: 0 });
+  const [places, setPlaces] = useState([]); // [{competition, place, amount}]
+  const [soloCount, setSoloCount] = useState(0);
+  const [teamCount, setTeamCount] = useState(0);
+  const [liveLoading, setLiveLoading] = useState(isLive);
+  const [liveError, setLiveError] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(null); // null | "saving" | "saved" | "error"
+  const [placeSavingKey, setPlaceSavingKey] = useState(null); // "competition-place" currently saving
+
+  useEffect(() => {
+    if (!isLive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const events = await fetchEvents();
+        if (cancelled || events.length === 0) return;
+        setYears(events.map((e) => e.year).sort((a, b) => b - a));
+      } catch (err) {
+        console.error("Failed to load events:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive]);
+
+  // Setup only touches game_settings-style config tables and cheap
+  // participant counts — no rank/payout views, so this never has to wait
+  // on the expensive tiebreaker/payout computation (that's Results).
+  useEffect(() => {
+    if (!isLive) {
+      setLiveLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLiveLoading(true);
+    setLiveError(null);
+    setSaveStatus(null);
+    (async () => {
+      try {
+        const event = await fetchEventByYear(selectedYear);
+        if (cancelled) return;
+        if (!event) {
+          setSelectedEventId(null);
+          setSettings({ soloBuyIn: 0, teamBuyIn: 0, carrollCupBuyIn: 0 });
+          setPlaces([]);
+          return;
+        }
+        setSelectedEventId(event.id);
+        const [cs, placeRows, playersRows, teamsRows] = await Promise.all([
+          fetchCompetitionSettings(event.id),
+          fetchCompetitionPayoutPlaces(event.id),
+          fetchPlayers(event.id),
+          fetchTeams(event.id),
+        ]);
+        if (cancelled) return;
+        setSettings(
+          cs
+            ? { soloBuyIn: Number(cs.solo_buy_in), teamBuyIn: Number(cs.team_buy_in), carrollCupBuyIn: Number(cs.carroll_cup_buy_in) }
+            : { soloBuyIn: 0, teamBuyIn: 0, carrollCupBuyIn: 0 }
+        );
+        setPlaces(placeRows.map((p) => ({ ...p, amount: Number(p.amount) })));
+        setSoloCount(playersRows.filter((p) => p.competing !== false).length);
+        setTeamCount(teamsRows.length);
+      } catch (err) {
+        console.error("Failed to load competition setup:", err);
+        setLiveError(err.message || String(err));
+      } finally {
+        if (!cancelled) setLiveLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, selectedYear]);
+
+  const update = (field, value) => setSettings((prev) => ({ ...prev, [field]: value === "" ? 0 : Number(value) }));
+
+  const handleSaveBuyIns = async () => {
+    if (!isLive || !selectedEventId) return;
+    setSaveStatus("saving");
+    try {
+      await upsertCompetitionSettings(selectedEventId, settings);
+      setSaveStatus("saved");
+    } catch (err) {
+      console.error("Failed to save competition buy-ins:", err);
+      setSaveStatus("error");
+    }
+  };
+
+  const placesFor = (competition) => places.filter((p) => p.competition === competition).sort((a, b) => a.place - b.place);
+
+  const handlePlaceAmountChange = (competition, place, amount) => {
+    setPlaces((prev) => prev.map((p) => (p.competition === competition && p.place === place ? { ...p, amount } : p)));
+  };
+
+  const handlePlaceAmountSave = async (competition, place, amount) => {
+    if (!isLive || !selectedEventId) return;
+    setPlaceSavingKey(`${competition}-${place}`);
+    try {
+      await upsertCompetitionPayoutPlace(selectedEventId, competition, place, amount || 0);
+    } catch (err) {
+      console.error("Failed to save payout place:", err);
+    } finally {
+      setPlaceSavingKey(null);
+    }
+  };
+
+  const addPlace = (competition) => {
+    const existing = placesFor(competition);
+    const nextPlace = existing.length > 0 ? Math.max(...existing.map((p) => p.place)) + 1 : 1;
+    setPlaces((prev) => [...prev, { competition, place: nextPlace, amount: 0 }]);
+    if (isLive && selectedEventId) {
+      upsertCompetitionPayoutPlace(selectedEventId, competition, nextPlace, 0).catch((err) => console.error("Failed to add place:", err));
+    }
+  };
+
+  const removePlace = (competition, place) => {
+    setPlaces((prev) => prev.filter((p) => !(p.competition === competition && p.place === place)));
+    if (isLive && selectedEventId) {
+      deleteCompetitionPayoutPlace(selectedEventId, competition, place).catch((err) => console.error("Failed to remove place:", err));
+    }
+  };
+
+  // For a brand-new year with no places set yet, seed Carroll Cup with its
+  // two fixed places (winning side / losing side) so there's always
+  // exactly 2 rows to fill in, rather than an empty list to build from
+  // scratch every time.
+  useEffect(() => {
+    if (!isLive || !selectedEventId || liveLoading) return;
+    const carrollPlaces = placesFor("carroll_cup");
+    if (carrollPlaces.length === 0) {
+      setPlaces((prev) => [...prev, { competition: "carroll_cup", place: 1, amount: 0 }, { competition: "carroll_cup", place: 2, amount: 0 }]);
+      Promise.all([
+        upsertCompetitionPayoutPlace(selectedEventId, "carroll_cup", 1, 0),
+        upsertCompetitionPayoutPlace(selectedEventId, "carroll_cup", 2, 0),
+      ]).catch((err) => console.error("Failed to seed Carroll Cup places:", err));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive, selectedEventId, liveLoading]);
+
+  const renderPlaceRow = (competition, p, labelOverride) => (
+    <div key={`${competition}-${p.place}`} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+      <div style={{ width: 84, fontSize: 12.5, color: "#6B6455", flexShrink: 0 }}>{labelOverride || `Place ${p.place}`}</div>
+      <input
+        type="number"
+        value={p.amount}
+        onChange={(e) => handlePlaceAmountChange(competition, p.place, e.target.value === "" ? 0 : Number(e.target.value))}
+        onBlur={(e) => handlePlaceAmountSave(competition, p.place, e.target.value === "" ? 0 : Number(e.target.value))}
+        style={{ flex: 1, border: "1px solid #DCD6C4", borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "'Inter', sans-serif" }}
+      />
+      {placeSavingKey === `${competition}-${p.place}` && <span style={{ fontSize: 10, color: "#8A8371" }}>Saving…</span>}
+      {!labelOverride && (
+        <button
+          onClick={() => removePlace(competition, p.place)}
+          style={{ border: "none", background: "none", color: "#B4AE9E", cursor: "pointer", fontSize: 14, padding: 2 }}
+          aria-label={`Remove place ${p.place}`}
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "14px 20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
+        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
+          Competition setup
+        </span>
+      </div>
+
+      <SettingsSection title="Year" description="Buy-ins and payout places are saved per year.">
+        <FormField label="Year">
+          <FormSelect value={selectedYear} onChange={(v) => setSelectedYear(Number(v))} options={years.map((y) => ({ value: y, label: String(y) }))} />
+        </FormField>
+      </SettingsSection>
+
+      <AutoComputedNote>
+        Buy-ins and payouts here are for the season-long standings — final Solo place, final Team place, Carroll Cup
+        outcome — not the daily round games (that's Games Setup). Set a dollar amount for whichever finishing places
+        you want to pay out; unset places pay nothing. Results (who actually won what) lives on Competition Results.
+      </AutoComputedNote>
+
+      {isLive && liveError && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner tone="error">Couldn't load competition setup ({liveError}).</Banner>
+        </div>
+      )}
+      {isLive && liveLoading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 14 }}>Loading…</div>}
+      {!isLive && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner tone="error">Not connected to Supabase — changes here won't be saved.</Banner>
+        </div>
+      )}
+
+      {!liveLoading && (
+        <>
+          <SettingsSection title="Buy-ins (per player)">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              <FormField label="Solo ($)">
+                <FormInput type="number" value={settings.soloBuyIn} onChange={(v) => update("soloBuyIn", v)} />
+              </FormField>
+              <FormField label="Team ($)">
+                <FormInput type="number" value={settings.teamBuyIn} onChange={(v) => update("teamBuyIn", v)} />
+              </FormField>
+              <FormField label="Carroll Cup ($)">
+                <FormInput type="number" value={settings.carrollCupBuyIn} onChange={(v) => update("carrollCupBuyIn", v)} />
+              </FormField>
+            </div>
+            {isLive && (
+              <div style={{ fontSize: 10.5, color: "#8A8371", marginTop: 8, lineHeight: 1.5 }}>
+                Solo pool: ${(settings.soloBuyIn * soloCount).toFixed(2)} ({soloCount} players). Team pool: $
+                {(settings.teamBuyIn * teamCount * 2).toFixed(2)} ({teamCount} teams). Carroll Cup pool: $
+                {(settings.carrollCupBuyIn * soloCount).toFixed(2)} ({soloCount} players, roster-dependent).
+              </div>
+            )}
+            {saveStatus === "saved" && (
+              <div style={{ marginTop: 10 }}>
+                <Banner tone="success">Buy-ins saved for {selectedYear}.</Banner>
+              </div>
+            )}
+            {saveStatus === "error" && (
+              <div style={{ marginTop: 10 }}>
+                <Banner tone="error">Couldn't save — try again.</Banner>
+              </div>
+            )}
+            <button className="bco-save-btn" style={{ marginTop: 10 }} onClick={handleSaveBuyIns} disabled={!isLive || !selectedEventId || saveStatus === "saving"}>
+              {saveStatus === "saving" ? "Saving…" : "Save buy-ins"}
+            </button>
+          </SettingsSection>
+
+          <SettingsSection title="Solo payouts by place" description={`${soloCount} players this year — pay out however many places you want.`}>
+            {placesFor("solo").map((p) => renderPlaceRow("solo", p))}
+            <button
+              onClick={() => addPlace("solo")}
+              style={{ border: "none", background: "none", color: "#1B4332", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: "4px 0", fontFamily: "'Inter', sans-serif" }}
+            >
+              + Add place
+            </button>
+          </SettingsSection>
+
+          <SettingsSection title="Team payouts by place" description={`${teamCount} teams this year — pay out however many places you want.`}>
+            {placesFor("team").map((p) => renderPlaceRow("team", p))}
+            <button
+              onClick={() => addPlace("team")}
+              style={{ border: "none", background: "none", color: "#1B4332", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: "4px 0", fontFamily: "'Inter', sans-serif" }}
+            >
+              + Add place
+            </button>
+          </SettingsSection>
+
+          <SettingsSection title="Carroll Cup payout" description="Always exactly 2 places — the winning side's pool, and the losing side's (usually $0). A tie splits both across everyone.">
+            {placesFor("carroll_cup").map((p) => renderPlaceRow("carroll_cup", p, p.place === 1 ? "Winning side" : "Losing side"))}
+          </SettingsSection>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Competition results — the expensive part (tiebreakers, payout
+// aggregation). Kept on its own screen so Setup never has to wait on it.
+// ---------------------------------------------------------------------------
+function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
+  const [years, setYears] = useState([currentYear]);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [teamsForYear, setTeamsForYear] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+  const [soloTiebreaks, setSoloTiebreaks] = useState([]);
+  const [teamTiebreaks, setTeamTiebreaks] = useState([]);
+  const [liveLoading, setLiveLoading] = useState(isLive);
+  const [liveError, setLiveError] = useState(null);
+
+  useEffect(() => {
+    if (!isLive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const events = await fetchEvents();
+        if (cancelled || events.length === 0) return;
+        setYears(events.map((e) => e.year).sort((a, b) => b - a));
+      } catch (err) {
+        console.error("Failed to load events:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive]);
+
+  useEffect(() => {
+    if (!isLive) {
+      setLiveLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLiveLoading(true);
+    setLiveError(null);
+    (async () => {
+      try {
+        const event = await fetchEventByYear(selectedYear);
+        if (cancelled) return;
+        if (!event) {
+          setSelectedEventId(null);
+          setPayouts([]);
+          setSoloTiebreaks([]);
+          setTeamTiebreaks([]);
+          return;
+        }
+        setSelectedEventId(event.id);
+        const [teamsRows, payoutRows, soloTb, teamTb] = await Promise.all([
+          fetchTeams(event.id),
+          fetchCompetitionPayouts(event.id),
+          fetchSoloTiebreakDetail(event.id),
+          fetchTeamTiebreakDetail(event.id),
+        ]);
+        if (cancelled) return;
+        setTeamsForYear(teamsRows);
+        setPayouts(payoutRows);
+        setSoloTiebreaks(soloTb);
+        setTeamTiebreaks(teamTb);
+      } catch (err) {
+        console.error("Failed to load competition results:", err);
+        setLiveError(err.message || String(err));
+      } finally {
+        if (!cancelled) setLiveLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, selectedYear]);
+
+  return (
+    <div style={{ padding: "14px 20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
+        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
+          Competition results
+        </span>
+      </div>
+
+      <SettingsSection title="Year">
+        <FormField label="Year">
+          <FormSelect value={selectedYear} onChange={(v) => setSelectedYear(Number(v))} options={years.map((y) => ({ value: y, label: String(y) }))} />
+        </FormField>
+      </SettingsSection>
+
+      <AutoComputedNote>
+        Computed live from actual final standings, including every tiebreak level — nothing here to update by hand.
+        Buy-ins and payout-by-place amounts are set on Competition Setup.
+      </AutoComputedNote>
+
+      {isLive && liveError && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner tone="error">Couldn't load competition results ({liveError}).</Banner>
+        </div>
+      )}
+      {isLive && liveLoading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 14 }}>Loading…</div>}
+      {!isLive && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner tone="error">Not connected to Supabase.</Banner>
+        </div>
+      )}
+
+      {!liveLoading && (
+        <>
+          <SettingsSection
+            title="How places were decided"
+            description="Outright, or which tiebreak level resolved it. A true tie (survived every level) combines the places it spans and splits the total evenly."
+          >
+            {!isLive ? (
+              <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>Connect to Supabase to see this.</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6 }}>Solo</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
+                  {soloTiebreaks.length === 0 ? (
+                    <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No Solo standings yet for {selectedYear}.</div>
+                  ) : (
+                    soloTiebreaks.map((t) => (
+                      <div key={t.player_id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "5px 0", borderBottom: "1px solid #F0ECDF" }}>
+                        <span style={{ color: "#2C2A22" }}>
+                          #{t.year_rank} {PLAYERS.find((p) => p.id === t.player_id)?.name || `Player ${t.player_id}`}
+                        </span>
+                        <span style={{ color: t.decided_by === "Outright" ? "#8A8371" : t.decided_by === "True tie" ? "#A3492E" : "#1B4332", fontWeight: t.decided_by === "Outright" ? 400 : 600 }}>
+                          {t.decided_by}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6 }}>Team</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {teamTiebreaks.length === 0 ? (
+                    <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No Team standings yet for {selectedYear}.</div>
+                  ) : (
+                    teamTiebreaks.map((t) => (
+                      <div key={t.team_id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "5px 0", borderBottom: "1px solid #F0ECDF" }}>
+                        <span style={{ color: "#2C2A22" }}>
+                          #{t.year_rank} {teamsForYear.find((tm) => tm.id === t.team_id)?.name || `Team ${t.team_id}`}
+                        </span>
+                        <span style={{ color: t.decided_by === "Outright" ? "#8A8371" : t.decided_by === "True tie" ? "#A3492E" : "#1B4332", fontWeight: t.decided_by === "Outright" ? 400 : 600 }}>
+                          {t.decided_by}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </SettingsSection>
+
+          <SettingsSection
+            title={`Competition payouts — ${selectedYear}`}
+            description="Player | Buy-ins | Winnings | Net, combined across Solo, Team, and Carroll Cup."
+          >
+            {!isLive ? (
+              <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>Connect to Supabase to see payouts.</div>
+            ) : payouts.length === 0 ? (
+              <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No payout places set, or no final standings yet for {selectedYear}.</div>
+            ) : (
+              <table className="bco-table">
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th style={{ textAlign: "right" }}>Buy-ins</th>
+                    <th style={{ textAlign: "right" }}>Winnings</th>
+                    <th style={{ textAlign: "right" }}>Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payouts
+                    .map((p) => ({ ...p, name: PLAYERS.find((pl) => pl.id === p.player_id)?.name || `Player ${p.player_id}` }))
+                    .sort((a, b) => b.net - a.net)
+                    .map((p) => (
+                      <tr key={p.player_id}>
+                        <td style={{ fontSize: 13, fontWeight: 500, color: "#2C2A22" }}>{p.name}</td>
+                        <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
+                          ${Number(p.total_buy_ins).toFixed(2)}
+                        </td>
+                        <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
+                          ${Number(p.total_winnings).toFixed(2)}
+                        </td>
+                        <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: Number(p.net) >= 0 ? "#1B4332" : "#A3492E" }}>
+                          {Number(p.net) >= 0 ? "+" : ""}
+                          ${Number(p.net).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </SettingsSection>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Import Results — CSV upload for historical scoring data. File structure

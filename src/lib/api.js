@@ -47,6 +47,127 @@ export async function createEvent(year) {
 // One row per event — buy-ins and prizes that drive Games' pot math
 // (v_skins_payout and v_poker_payout already join this table, so saving
 // here immediately changes those payouts).
+// Computed live from game_settings + actual results (v_player_year_payouts)
+// — there's no stored balance to keep in sync, so this is always correct
+// as of whatever's actually been recorded, including corrections.
+// -----------------------------------------------------------------------------
+// Competition payouts — season-long Solo/Team/Carroll Cup buy-ins and
+// place-based payouts, separate from the per-round game payouts above.
+// -----------------------------------------------------------------------------
+
+export async function fetchCompetitionSettings(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("competition_settings")
+    .select("solo_buy_in, team_buy_in, carroll_cup_buy_in")
+    .eq("event_id", eventId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertCompetitionSettings(eventId, { soloBuyIn, teamBuyIn, carrollCupBuyIn }) {
+  const db = requireClient();
+  const { error } = await db.from("competition_settings").upsert(
+    { event_id: eventId, solo_buy_in: soloBuyIn, team_buy_in: teamBuyIn, carroll_cup_buy_in: carrollCupBuyIn },
+    { onConflict: "event_id" }
+  );
+  if (error) throw error;
+}
+
+export async function fetchCompetitionPayoutPlaces(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("competition_payout_places")
+    .select("competition, place, amount")
+    .eq("event_id", eventId)
+    .order("place");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function upsertCompetitionPayoutPlace(eventId, competition, place, amount) {
+  const db = requireClient();
+  const { error } = await db
+    .from("competition_payout_places")
+    .upsert({ event_id: eventId, competition, place, amount }, { onConflict: "event_id,competition,place" });
+  if (error) throw error;
+}
+
+export async function deleteCompetitionPayoutPlace(eventId, competition, place) {
+  const db = requireClient();
+  const { error } = await db.from("competition_payout_places").delete().eq("event_id", eventId).eq("competition", competition).eq("place", place);
+  if (error) throw error;
+}
+
+// Computed live from competition_settings + actual final standings — same
+// no-stored-balance approach as the game payouts.
+// Which finishing places were outright vs. decided by a tiebreaker (and
+// which level), for the "how was this place decided" display.
+export async function fetchSoloTiebreakDetail(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("v_solo_tiebreak_detail")
+    .select("player_id, year_rank, tied_count, decided_by")
+    .eq("event_id", eventId)
+    .order("year_rank");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchTeamTiebreakDetail(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("v_team_tiebreak_detail")
+    .select("team_id, year_rank, tied_count, decided_by")
+    .eq("event_id", eventId)
+    .order("year_rank");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchCompetitionPayouts(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("v_competition_payouts")
+    .select("player_id, total_winnings, total_buy_ins, net")
+    .eq("event_id", eventId);
+  if (error) throw error;
+  return data || [];
+}
+
+// Games + Competitions combined, per player.
+export async function fetchGrandTotalPayouts(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("v_player_year_grand_total")
+    .select("player_id, total_winnings, total_buy_ins, net")
+    .eq("event_id", eventId);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchPlayerYearPayouts(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("v_player_year_payouts")
+    .select("player_id, total_winnings, total_buy_ins, net")
+    .eq("event_id", eventId);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchCtpPayout(roundId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("v_ctp_payout")
+    .select("ctp_buy_in, participants, par3_holes, total_pot, value_per_hole")
+    .eq("round_id", roundId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function fetchGameSettings(eventId) {
   const db = requireClient();
   const { data, error } = await db

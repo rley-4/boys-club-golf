@@ -331,6 +331,24 @@ export async function fetchLowNetTeam(roundId) {
   return data || [];
 }
 
+// Split evenly across everyone tied for lowest net — already resolved
+// server-side, so no tie-breaking logic needs duplicating client-side.
+export async function fetchLowNetSoloPayout(roundId) {
+  const db = requireClient();
+  const { data, error } = await db.from("v_low_net_solo_payout").select("player_id, amount").eq("round_id", roundId);
+  if (error) throw error;
+  return data || [];
+}
+
+// One row per player on a tied winning team — already split across every
+// player on every tied team, not just per-team.
+export async function fetchLowNetTeamPayout(roundId) {
+  const db = requireClient();
+  const { data, error } = await db.from("v_low_net_team_payout").select("player_id, amount").eq("round_id", roundId);
+  if (error) throw error;
+  return data || [];
+}
+
 // -----------------------------------------------------------------------------
 // Closest to Pin — manual entry, no view needed, just the raw table.
 // -----------------------------------------------------------------------------

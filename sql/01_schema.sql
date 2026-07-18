@@ -258,6 +258,7 @@ create table game_settings (
   id                        serial primary key,
   event_id                  integer not null unique references events (id) on delete cascade,
   skins_buy_in              numeric(6,2) not null default 5,
+  poker_buy_in              numeric(6,2) not null default 5,
   poker_three_putt_buy_in   numeric(6,2) not null default 1,
   low_net_solo_buy_in       numeric(6,2) not null default 10,
   low_net_team_buy_in       numeric(6,2) not null default 10,
@@ -274,4 +275,28 @@ create table poker_results (
   id                serial primary key,
   round_id          integer not null unique references rounds (id) on delete cascade,
   winner_player_id  integer not null references players (id)
+);
+
+-- -----------------------------------------------------------------------------
+-- Competition-level (season-long) buy-ins and place payouts — Solo/Team
+-- final standings, and Carroll Cup outcome. Separate from game_settings,
+-- which is per-round. See calculations.sql for the payout math; RLS for
+-- these two (admin write, open read) is enabled where they're created,
+-- migration 30, since they don't exist yet when migration 26 runs.
+-- -----------------------------------------------------------------------------
+create table if not exists competition_settings (
+  id                  serial primary key,
+  event_id            integer not null unique references events (id) on delete cascade,
+  solo_buy_in         numeric(6,2) not null default 0,
+  team_buy_in         numeric(6,2) not null default 0,
+  carroll_cup_buy_in  numeric(6,2) not null default 0
+);
+
+create table if not exists competition_payout_places (
+  id           serial primary key,
+  event_id     integer not null references events (id) on delete cascade,
+  competition  text not null check (competition in ('solo', 'team', 'carroll_cup')),
+  place        integer not null check (place >= 1),
+  amount       numeric(8,2) not null default 0,
+  unique (event_id, competition, place)
 );
