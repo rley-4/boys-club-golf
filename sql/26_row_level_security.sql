@@ -10,8 +10,10 @@
 -- lock yourself out of the Admin screens.
 --
 -- Three-tier role model (see migration 27 for the role column itself):
---   admin  — create/edit/remove anything.
---   player — create/edit only their own scores/round_submissions.
+--   admin  — create/edit/remove anything, any year, any time.
+--   player — create/edit only their own scores/round_submissions, only for
+--            the currently-active year, only before that round is
+--            submitted.
 --   viewer — read everything; no create/edit/remove anywhere.
 --
 -- Pattern used throughout: a "read_authenticated" policy (select, open to
@@ -80,18 +82,89 @@ create policy "admin_write" on round_matchups for all using (is_admin_user()) wi
 create policy "admin_write" on ctp_results for all using (is_admin_user()) with check (is_admin_user());
 create policy "admin_write" on game_settings for all using (is_admin_user()) with check (is_admin_user());
 create policy "admin_write" on poker_results for all using (is_admin_user()) with check (is_admin_user());
-create policy "admin_write" on team_hole_results for all using (is_admin_user()) with check (is_admin_user());
 
 -- Write: only the "player" role can touch their own scores/submissions —
 -- explicitly role-gated, not just "whichever player_id you're linked to",
 -- so a viewer linked to a player row still can't write even their own
--- scores. Admins can write anyone's.
+-- scores. Admins can write anyone's, any year, any time.
+--
+-- Two extra restrictions for the player role specifically, matching the
+-- app's Score entry behavior:
+--   - only for a round belonging to whichever event is currently marked
+--     is_current — browsing a past year on Score entry is read-only for
+--     players even before this runs, this makes it a real rule.
+--   - only before that round_submission is marked 'submitted' — once
+--     submitted, only an admin can touch it further.
 create policy "own_or_admin_write" on scores for all
-  using ((player_id = my_player_id() and my_role() = 'player') or is_admin_user())
-  with check ((player_id = my_player_id() and my_role() = 'player') or is_admin_user());
+  using (
+    (
+      player_id = my_player_id()
+      and my_role() = 'player'
+      and exists (select 1 from rounds r join events e on e.id = r.event_id where r.id = scores.round_id and e.is_current = true)
+      and not exists (select 1 from round_submissions rs where rs.round_id = scores.round_id and rs.player_id = scores.player_id and rs.status = 'submitted')
+    )
+    or is_admin_user()
+  )
+  with check (
+    (
+      player_id = my_player_id()
+      and my_role() = 'player'
+      and exists (select 1 from rounds r join events e on e.id = r.event_id where r.id = scores.round_id and e.is_current = true)
+      and not exists (select 1 from round_submissions rs where rs.round_id = scores.round_id and rs.player_id = scores.player_id and rs.status = 'submitted')
+    )
+    or is_admin_user()
+  );
+
 create policy "own_or_admin_write" on round_submissions for all
-  using ((player_id = my_player_id() and my_role() = 'player') or is_admin_user())
-  with check ((player_id = my_player_id() and my_role() = 'player') or is_admin_user());
+  using (
+    (
+      player_id = my_player_id()
+      and my_role() = 'player'
+      and exists (select 1 from rounds r join events e on e.id = r.event_id where r.id = round_submissions.round_id and e.is_current = true)
+      and coalesce(status, '') != 'submitted'
+    )
+    or is_admin_user()
+  )
+  with check (
+    (
+      player_id = my_player_id()
+      and my_role() = 'player'
+      and exists (select 1 from rounds r join events e on e.id = r.event_id where r.id = round_submissions.round_id and e.is_current = true)
+    )
+    or is_admin_user()
+  );
+
+-- Write: for Scramble/Alternate Shot rounds, Score entry has a player enter
+-- their TEAM's net score/points per hole rather than their own strokes —
+-- there's no round_submissions-style lock for this data (it just autosaves
+-- on every change), so this mirrors the scores policy minus that part:
+-- only a player linked to one of that specific team's two members can
+-- write to it, and only for the currently-active year.
+create policy "own_team_or_admin_write" on team_hole_results for all
+  using (
+    (
+      my_role() = 'player'
+      and exists (
+        select 1 from teams t
+        where t.id = team_hole_results.team_id
+        and (t.player_a_id = my_player_id() or t.player_b_id = my_player_id())
+      )
+      and exists (select 1 from rounds r join events e on e.id = r.event_id where r.id = team_hole_results.round_id and e.is_current = true)
+    )
+    or is_admin_user()
+  )
+  with check (
+    (
+      my_role() = 'player'
+      and exists (
+        select 1 from teams t
+        where t.id = team_hole_results.team_id
+        and (t.player_a_id = my_player_id() or t.player_b_id = my_player_id())
+      )
+      and exists (select 1 from rounds r join events e on e.id = r.event_id where r.id = team_hole_results.round_id and e.is_current = true)
+    )
+    or is_admin_user()
+  );
 
 -- players: admins can do anything. Any signed-in user can update their own
 -- row (editing their own bio/hometown) or claim an unclaimed one — but see

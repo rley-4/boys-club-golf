@@ -7,7 +7,6 @@ import { fetchUnclaimedPlayers, claimPlayer, signOut } from "./lib/auth.js";
 export default function ClaimProfileScreen({ onClaimed }) {
   const [players, setPlayers] = useState(null); // null = loading
   const [selectedId, setSelectedId] = useState("");
-  const [viewMode, setViewMode] = useState("mobile");
   const [status, setStatus] = useState(null); // null | "saving" | "error"
   const [error, setError] = useState(null);
 
@@ -33,7 +32,7 @@ export default function ClaimProfileScreen({ onClaimed }) {
     setError(null);
     try {
       await claimPlayer(Number(selectedId));
-      onClaimed(viewMode);
+      onClaimed();
     } catch (err) {
       console.error("Failed to claim player profile:", err);
       setError(err.message || "Couldn't link that profile — try again, or ask the organizer for help.");
@@ -96,43 +95,6 @@ export default function ClaimProfileScreen({ onClaimed }) {
         )}
 
         {error && <div style={{ fontSize: 11.5, color: "#A3492E", marginBottom: 12, lineHeight: 1.5 }}>{error}</div>}
-
-        <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em" }}>VIEW AS</div>
-        <div style={{ display: "flex", border: "1px solid #DCD6C4", borderRadius: 8, overflow: "hidden", marginBottom: 18 }}>
-          <button
-            onClick={() => setViewMode("mobile")}
-            style={{
-              flex: 1,
-              border: "none",
-              background: viewMode === "mobile" ? "#1B4332" : "#FFFFFF",
-              color: viewMode === "mobile" ? "#F3EFE2" : "#6B6455",
-              padding: "9px 0",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Mobile
-          </button>
-          <button
-            onClick={() => setViewMode("desktop")}
-            style={{
-              flex: 1,
-              border: "none",
-              borderLeft: "1px solid #DCD6C4",
-              background: viewMode === "desktop" ? "#1B4332" : "#FFFFFF",
-              color: viewMode === "desktop" ? "#F3EFE2" : "#6B6455",
-              padding: "9px 0",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Desktop
-          </button>
-        </div>
 
         <button
           onClick={handleClaim}

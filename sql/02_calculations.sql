@@ -183,10 +183,20 @@ join (
 -- -----------------------------------------------------------------------------
 -- Team roster helper.
 -- -----------------------------------------------------------------------------
+-- Deduplicated: if a player is ever accidentally linked to more than one
+-- team for the same event (a Team setup data mistake — e.g. reassigned
+-- without removing the old slot), this previously returned one row per
+-- team, and the singles branch of v_team_hole_points would then count that
+-- player's points once per team they appeared on, inflating team totals.
+-- distinct on picks a single, deterministic team per player per event.
 create or replace view v_team_players as
-select id as team_id, event_id, player_a_id as player_id from teams
-union all
-select id as team_id, event_id, player_b_id as player_id from teams;
+select distinct on (player_id, event_id) team_id, event_id, player_id
+from (
+  select id as team_id, event_id, player_a_id as player_id from teams
+  union all
+  select id as team_id, event_id, player_b_id as player_id from teams
+) x
+order by player_id, event_id, team_id;
 
 -- =============================================================================
 -- MATCHUP-NETTED HANDICAP (Team match points only)

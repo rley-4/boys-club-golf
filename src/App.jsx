@@ -13,8 +13,14 @@ import { onAuthStateChange, fetchMyPlayer } from "./lib/auth.js";
 // runs. Checking for that hash is how we tell "just clicked an invite link"
 // apart from "already has a real session."
 function urlIndicatesPasswordSetup() {
+  // Supabase puts the token/type differently depending on the project's
+  // auth flow: the (older) implicit flow uses a #access_token=...&type=...
+  // hash fragment; PKCE (increasingly the default) uses a ?code=...&type=...
+  // query string instead. Checking only the hash misses PKCE-flow invites
+  // entirely, silently dropping them straight past this screen.
   const hash = window.location.hash || "";
-  return hash.includes("type=invite") || hash.includes("type=recovery");
+  const search = window.location.search || "";
+  return hash.includes("type=invite") || hash.includes("type=recovery") || search.includes("type=invite") || search.includes("type=recovery");
 }
 
 export default function App() {
@@ -22,7 +28,6 @@ export default function App() {
   const [isLive, setIsLive] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [initialYear, setInitialYear] = useState(undefined);
-  const [viewMode, setViewMode] = useState("mobile");
 
   // "checking" | "needs-password" | "needs-login" | "needs-claim" | "authed"
   // Demo mode (no Supabase configured) skips straight to "authed" — there's
@@ -31,8 +36,7 @@ export default function App() {
   const [myPlayer, setMyPlayer] = useState(null); // { id, name, role } | null
   const [checkTimedOut, setCheckTimedOut] = useState(false);
 
-  const resolveAfterSignIn = async (mode) => {
-    if (mode) setViewMode(mode);
+  const resolveAfterSignIn = async () => {
     console.log("[auth] resolving player profile…");
     try {
       const player = await fetchMyPlayer();
@@ -233,7 +237,7 @@ export default function App() {
 
   return (
     <div style={{ padding: "24px 12px", minHeight: "100vh", background: "#EFEAE0" }}>
-      <AppShell initialYear={initialYear} isLive={isLive} loadError={loadError} initialViewMode={viewMode} myPlayer={myPlayer} />
+      <AppShell initialYear={initialYear} isLive={isLive} loadError={loadError} myPlayer={myPlayer} />
     </div>
   );
 }

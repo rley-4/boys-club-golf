@@ -601,15 +601,50 @@ const SHARED_STYLES = `
     letter-spacing: 0.02em; padding: 0 6px 8px; border-bottom: 1px solid #E4DFCE;
   }
   table.bco-table td { padding: 9px 6px; border-bottom: 1px solid #EFEBDE; vertical-align: middle; }
+
+  /* Responsive shell — fluid with the actual browser width, not a fixed
+     toggle. Narrow viewports get a bottom tab bar and a phone-ish column
+     width; wider viewports get a sidebar and more breathing room, with a
+     capped reading width so a single-column app doesn't stretch edge to
+     edge on an ultrawide monitor. */
+  .bco-shell {
+    width: 100%;
+    max-width: 460px;
+    margin: 0 auto;
+    min-height: 600px;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #FBF8F1;
+    border: 1px solid #DCD6C4;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .bco-shell-content { flex: 1; overflow-y: auto; }
+  .bco-sidebar { display: none; }
+  .bco-bottombar { display: flex; border-top: 1px solid #E4DFCE; background: #F3EFE2; }
+  .bco-content-inner { max-width: none; margin: 0; }
+
+  @media (min-width: 768px) {
+    .bco-shell {
+      max-width: 900px;
+      height: 85vh;
+      min-height: 600px;
+      flex-direction: row;
+    }
+    .bco-sidebar {
+      display: flex; flex-direction: column;
+      width: 190px; flex-shrink: 0;
+      border-right: 1px solid #E4DFCE; background: #F3EFE2;
+      padding: 18px 10px;
+    }
+    .bco-bottombar { display: none; }
+    .bco-content-inner { max-width: 560px; margin: 0 auto; }
+  }
 `;
 
-export default function AppShell({ initialYear, isLive = false, loadError = null, initialViewMode = "mobile", myPlayer = null } = {}) {
+export default function AppShell({ initialYear, isLive = false, loadError = null, myPlayer = null } = {}) {
   const [activeTab, setActiveTab] = useState("score");
-  // Mobile (phone-frame, bottom nav) or Desktop (taller frame, side nav).
-  // Internal screens stay single-column either way — this switches the
-  // app's chrome, not a per-screen responsive redesign. Chosen on the
-  // login screen now, not a corner toggle inside the app.
-  const [viewMode] = useState(initialViewMode);
   // Shared across Score and Matches so match progress reflects live saves.
   // Key: "year-round-playerId" -> { entries: { [hole]: {strokes, putts} }, status: "in-progress" | "submitted" }
   const [scoresStore, setScoresStore] = useState({});
@@ -705,8 +740,6 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
     refreshRoundMap();
   }, [currentYear, isLive]);
 
-  const isDesktop = viewMode === "desktop";
-
   const screenContent = (
     <>
       {activeTab === "score" && (
@@ -729,87 +762,50 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
     </>
   );
 
-  if (isDesktop) {
-    return (
-      <div>
-        <style>{SHARED_STYLES}</style>
-        <div
-          style={{
-            maxWidth: 840,
-            margin: "0 auto",
-            height: "85vh",
-            minHeight: 600,
-            display: "flex",
-            fontFamily: "'Inter', system-ui, sans-serif",
-            background: "#FBF8F1",
-            border: "1px solid #DCD6C4",
-            borderRadius: 16,
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ width: 190, flexShrink: 0, borderRight: "1px solid #E4DFCE", background: "#F3EFE2", display: "flex", flexDirection: "column", padding: "18px 10px" }}>
-            <div className="bco-display" style={{ fontSize: 17, fontWeight: 600, color: "#1B4332", padding: "0 10px", marginBottom: 18 }}>
-              BCO Golf
-            </div>
-            {TABS.map((t) => {
-              const Icon = t.icon;
-              const active = activeTab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    border: "none",
-                    background: active ? "#DCEFE3" : "transparent",
-                    color: active ? "#1B4332" : "#6B6455",
-                    borderRadius: 8,
-                    padding: "9px 10px",
-                    fontSize: 13,
-                    fontWeight: active ? 600 : 500,
-                    cursor: "pointer",
-                    fontFamily: "'Inter', sans-serif",
-                    textAlign: "left",
-                    marginBottom: 2,
-                  }}
-                >
-                  <Icon size={17} strokeWidth={active ? 2.3 : 1.8} />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            <div style={{ maxWidth: 520, margin: "0 auto" }}>{screenContent}</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
-      <div
-        style={{
-          maxWidth: 460,
-          margin: "0 auto",
-          height: 760,
-          display: "flex",
-          flexDirection: "column",
-          fontFamily: "'Inter', system-ui, sans-serif",
-          background: "#FBF8F1",
-          border: "1px solid #DCD6C4",
-          borderRadius: 16,
-          overflow: "hidden",
-        }}
-      >
-        <style>{SHARED_STYLES}</style>
+      <style>{SHARED_STYLES}</style>
+      <div className="bco-shell">
+        <div className="bco-sidebar">
+          <div className="bco-display" style={{ fontSize: 17, fontWeight: 600, color: "#1B4332", padding: "0 10px", marginBottom: 18 }}>
+            BCO Golf
+          </div>
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            const active = activeTab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  border: "none",
+                  background: active ? "#DCEFE3" : "transparent",
+                  color: active ? "#1B4332" : "#6B6455",
+                  borderRadius: 8,
+                  padding: "9px 10px",
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  cursor: "pointer",
+                  fontFamily: "'Inter', sans-serif",
+                  textAlign: "left",
+                  marginBottom: 2,
+                }}
+              >
+                <Icon size={17} strokeWidth={active ? 2.3 : 1.8} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
 
-        <div style={{ flex: 1, overflowY: "auto" }}>{screenContent}</div>
+        <div className="bco-shell-content">
+          <div className="bco-content-inner">{screenContent}</div>
+        </div>
 
-        <div style={{ display: "flex", borderTop: "1px solid #E4DFCE", background: "#F3EFE2" }}>
+        <div className="bco-bottombar">
           {TABS.map((t) => {
             const Icon = t.icon;
             const active = activeTab === t.key;
@@ -830,6 +826,7 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
 // Score entry tab
 // ---------------------------------------------------------------------------
 function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadError, currentEventId, myPlayer }) {
+  const yr = useYearRoundData(isLive, currentYear);
   const [selectedPlayerId, setSelectedPlayerId] = useState(() => (myPlayer ? String(myPlayer.id) : ""));
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [teamOptionsList, setTeamOptionsList] = useState([]);
@@ -844,11 +841,24 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
   const [liveMatchups, setLiveMatchups] = useState(null); // null = use mock MATCHES_BY_ROUND
   const [liveCarrollRoster, setLiveCarrollRoster] = useState(null); // null = use mock CARROLL_CUP_ROSTER_DEFAULT
 
+  // Keep the selected round valid whenever the selected year's rounds load
+  // or the year changes.
+  useEffect(() => {
+    if (!isLive) return;
+    if (yr.rounds.length === 0) return;
+    if (!yr.rounds.some((r) => r.label === selectedRound)) {
+      setSelectedRound(yr.rounds[0].label);
+      setHoleIndex(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive, yr.rounds]);
+
   // Real teams, that round's matchups, and the Carroll Cup roster — this is
   // what makes the Team badge, Carroll Cup badge, and Pops reflect whatever
-  // is actually set up on Admin, instead of the placeholder roster.
+  // is actually set up on Admin, instead of the placeholder roster. Scoped
+  // to whichever year is selected here, not the global Current Year.
   useEffect(() => {
-    if (!isLive || !currentEventId) {
+    if (!isLive || !yr.selectedEventId) {
       setLiveTeams(null);
       setLiveMatchups(null);
       setLiveCarrollRoster(null);
@@ -858,9 +868,9 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
     (async () => {
       try {
         const [dbTeams, dbMatchups, dbRoster] = await Promise.all([
-          fetchTeams(currentEventId),
-          fetchRoundMatchups(currentEventId),
-          fetchCarrollCupRoster(currentEventId),
+          fetchTeams(yr.selectedEventId),
+          fetchRoundMatchups(yr.selectedEventId),
+          fetchCarrollCupRoster(yr.selectedEventId),
         ]);
         if (cancelled) return;
         setLiveTeams(
@@ -883,15 +893,19 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
     return () => {
       cancelled = true;
     };
-  }, [isLive, currentEventId]);
+  }, [isLive, yr.selectedEventId]);
 
-  // The round drives the course now — no separate course picker. Falls back
-  // to the first course if this round isn't mapped yet (e.g. not set up on
-  // Admin > Event settings, or not synced from the backend).
-  const course = ROUND_COURSE[selectedRound] || COURSES[0];
-  const playFormat = ROUND_FORMATS[selectedRound] || "stroke";
+  // The round drives the course now — no separate course picker. Resolved
+  // from this screen's own year selection (yr.rounds), not the global
+  // SCORE_ROUNDS/ROUND_COURSE/ROUND_FORMATS — those track whatever year
+  // Score entry writes to by default, which may not be the year being
+  // browsed here. Falls back to the mock shape when offline.
+  const liveRound = isLive ? yr.rounds.find((r) => r.label === selectedRound) : null;
+  const course = isLive ? (liveRound ? COURSES.find((c) => c.id === liveRound.courseId) : null) || COURSES[0] : ROUND_COURSE[selectedRound] || COURSES[0];
+  const playFormat = isLive ? liveRound?.playFormat || "stroke" : ROUND_FORMATS[selectedRound] || "stroke";
   const isNonStrokePlay = playFormat !== "stroke";
-  const teamRoundId = ROUND_ID_BY_LABEL[selectedRound] || null;
+  const roundId = isLive ? liveRound?.id || null : ROUND_ID_BY_LABEL[selectedRound] || null;
+  const teamRoundId = roundId;
 
   useEffect(() => {
     if (!isNonStrokePlay || !isLive || !currentEventId || !teamRoundId) return;
@@ -936,13 +950,12 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
 
   const activePlayers = useMemo(() => PLAYERS.filter((p) => p.competing !== false), []);
   const player = PLAYERS.find((p) => p.id === Number(selectedPlayerId)) || null;
-  const storeKey = player ? `${currentYear}-${selectedRound}-${player.id}` : null;
+  const storeKey = player ? `${yr.selectedYear}-${selectedRound}-${player.id}` : null;
   const record = storeKey ? scoresStore[storeKey] : null;
   const entries = record?.entries || {};
   const status = record?.status || null; // null | "in-progress" | "submitted"
 
   const courseHandicap = player ? calcCourseHandicap(player.handicapIndex, course.slope, course.rating, totalPar) : null;
-  const roundId = ROUND_ID_BY_LABEL[selectedRound] || null;
   const matchPops = player
     ? liveTeams && liveMatchups
       ? computeMatchPopsLive(player, roundId, liveTeams, liveMatchups, course, totalPar)
@@ -983,10 +996,17 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
     if (!storeKey) return;
     setScoresStore((prev) => {
       const prevRecord = prev[storeKey] || { entries: {}, status: null };
+      // An admin editing an already-submitted round is correcting a value,
+      // not un-submitting it — status stays "submitted". A non-admin can't
+      // reach this path at all once submitted (inputs are disabled), but
+      // keeping the old revert-to-in-progress behavior here too as a
+      // defensive fallback.
+      const nextStatus =
+        prevRecord.status === "submitted" ? (myPlayer?.role === "admin" ? "submitted" : "in-progress") : prevRecord.status || "in-progress";
       return {
         ...prev,
         [storeKey]: {
-          status: prevRecord.status === "submitted" ? "in-progress" : prevRecord.status || "in-progress",
+          status: nextStatus,
           entries: {
             ...prevRecord.entries,
             [holeNumber]: {
@@ -1051,31 +1071,42 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
   const diff = entry.strokes != null ? entry.strokes - hole.par : null;
   const tone = diff != null ? scoreTone(diff) : null;
 
-  const handleSaveProgress = async () => {
-    if (!player) {
-      setSaveStatus("no-player");
-      return;
-    }
-    setScoresStore((prev) => {
-      const prevRecord = prev[storeKey] || { entries: {}, status: null };
-      return { ...prev, [storeKey]: { ...prevRecord, status: prevRecord.status === "submitted" ? "submitted" : "in-progress" } };
-    });
-    setSaveStatus("saved");
+  // Once submitted, a non-admin can't change anything further — matches
+  // what the RLS policy (sql/26) enforces at the database level once
+  // that's turned on; this is the same rule applied client-side so the UI
+  // is consistent even before RLS is live.
+  const isAdmin = myPlayer?.role === "admin";
+  const canEdit = status !== "submitted" || isAdmin;
 
-    if (isLive && roundId) {
+  // Autosave — debounced so a burst of stroke/putt taps doesn't fire a
+  // network call per click. Skipped entirely once locked (submitted, and
+  // not an admin), and while there's nothing entered yet.
+  const autosaveTimeout = useRef(null);
+  useEffect(() => {
+    if (!player || !storeKey || !isLive || !roundId) return;
+    if (!canEdit) return;
+    if (Object.keys(entries).length === 0) return;
+    if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+    autosaveTimeout.current = setTimeout(async () => {
       setSyncStatus("syncing");
       try {
         await upsertScores(roundId, player.id, entries);
         await upsertSubmission(roundId, player.id, status === "submitted" ? "submitted" : "in_progress");
         setSyncStatus("synced");
       } catch (err) {
-        console.error("Failed to save to Supabase:", err);
+        console.error("Autosave failed:", err);
         setSyncStatus("sync-error");
       }
-    }
-  };
+    }, 800);
+    return () => {
+      if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, storeKey, player, roundId, isLive, canEdit]);
 
-  const handleSubmit = async () => {
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+
+  const handleSubmitClick = () => {
     setAttemptedSubmit(true);
     if (!player) {
       setSaveStatus("no-player");
@@ -1085,8 +1116,13 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
       setSaveStatus("missing");
       return;
     }
+    setShowSubmitConfirm(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     setScoresStore((prev) => ({ ...prev, [storeKey]: { ...prev[storeKey], status: "submitted" } }));
     setSaveStatus("submitted");
+    setShowSubmitConfirm(false);
 
     if (isLive && roundId) {
       setSyncStatus("syncing");
@@ -1110,15 +1146,15 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
   const [clearStatus, setClearStatus] = useState(null); // null | "clearing" | "error"
 
   const handleClearScores = async () => {
-    if (!player || !roundId) return;
+    if (!player || !roundId || !canEdit) return;
     setClearStatus("clearing");
     try {
-      if (isLive && currentEventId) {
+      if (isLive && yr.selectedEventId) {
         // Freshness check — the round this page loaded should still
-        // actually belong to whichever year is currently set as Current
-        // Year. Guards against the admin having changed it since this page
+        // actually belong to whichever year is selected here. Guards
+        // against the admin having changed a round's setup since this page
         // was loaded (this app doesn't live-sync across sessions).
-        const belongs = await verifyRoundBelongsToEvent(roundId, currentEventId);
+        const belongs = await verifyRoundBelongsToEvent(roundId, yr.selectedEventId);
         if (!belongs) {
           setClearStatus("error");
           return;
@@ -1152,16 +1188,34 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
       )}
       <div style={{ background: "#1B4332", color: "#F3EFE2", padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span className="bco-mono" style={{ fontSize: 11, fontWeight: 600, background: "rgba(255,255,255,0.14)", padding: "4px 8px", borderRadius: 6 }}>
-            {currentYear}
-          </span>
+          <select
+            className="bco-mono"
+            value={yr.selectedYear}
+            onChange={(e) => yr.setSelectedYear(Number(e.target.value))}
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              background: "rgba(255,255,255,0.14)",
+              color: "#F3EFE2",
+              border: "none",
+              padding: "5px 8px",
+              borderRadius: 6,
+              flexShrink: 0,
+            }}
+          >
+            {(yr.years.length > 0 ? yr.years : [currentYear]).map((y) => (
+              <option key={y} value={y} style={{ color: "#2C2A22" }}>
+                {y}
+              </option>
+            ))}
+          </select>
           <select
             className="bco-select"
             value={selectedRound}
             onChange={(e) => handleRoundChange(e.target.value)}
             style={{ width: 66, padding: "5px 6px", fontSize: 13, fontWeight: 600, flexShrink: 0 }}
           >
-            {SCORE_ROUNDS.map((r) => (
+            {(isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS).map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
@@ -1343,7 +1397,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em", textAlign: "center" }}>STROKES</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17 }} onClick={() => adjustStrokes(-1)} aria-label="Decrease strokes">
+              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustStrokes(-1)} disabled={!canEdit} aria-label="Decrease strokes">
                 −
               </button>
               <div style={{ minWidth: 46, textAlign: "center" }}>
@@ -1368,7 +1422,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
                   </span>
                 </div>
               </div>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17 }} onClick={() => adjustStrokes(1)} aria-label="Increase strokes">
+              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustStrokes(1)} disabled={!canEdit} aria-label="Increase strokes">
                 +
               </button>
             </div>
@@ -1377,7 +1431,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em", textAlign: "center" }}>PUTTS</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17 }} onClick={() => adjustPutts(-1)} aria-label="Decrease putts">
+              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustPutts(-1)} disabled={!canEdit} aria-label="Decrease putts">
                 −
               </button>
               <div style={{ minWidth: 46, textAlign: "center" }}>
@@ -1386,7 +1440,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
                 </div>
                 <div style={{ marginTop: 3, minHeight: 18 }} />
               </div>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17 }} onClick={() => adjustPutts(1)} aria-label="Increase putts">
+              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustPutts(1)} disabled={!canEdit} aria-label="Increase putts">
                 +
               </button>
             </div>
@@ -1459,62 +1513,94 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
         )}
         {syncStatus === "sync-error" && (
           <div style={{ marginTop: saveStatus ? 6 : 0 }}>
-            <Banner tone="error">Saved locally, but sync to Supabase failed — check console.</Banner>
+            <Banner tone="error">Autosave to Supabase failed — check console. Your entries are still kept locally.</Banner>
+          </div>
+        )}
+        {status === "submitted" && !isAdmin && (
+          <div style={{ marginTop: saveStatus || syncStatus === "sync-error" ? 6 : 0 }}>
+            <Banner tone="info">Submitted — this can no longer be edited. Ask an admin if something needs fixing.</Banner>
           </div>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: saveStatus || syncStatus === "sync-error" ? 10 : 0 }}>
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 12, marginBottom: 8 }}>
           {player && <StatusBadge status={status} />}
-          {isViewer ? (
-            <div style={{ flex: 1, fontSize: 12, color: "#8A8371", textAlign: "center", padding: "10px 0" }}>
-              Viewer access — scores here are read-only.
-            </div>
-          ) : (
-            <>
-          <button
-            onClick={handleSaveProgress}
-            style={{
-              flex: 1,
-              border: "1px solid #1B4332",
-              borderRadius: 10,
-              padding: "13px",
-              fontSize: 14,
-              fontWeight: 600,
-              fontFamily: "'Inter', sans-serif",
-              background: "#FFFFFF",
-              color: "#1B4332",
-              cursor: "pointer",
-            }}
-          >
-            Save
-          </button>
-          <button className="bco-save-btn" style={{ flex: 1 }} onClick={handleSubmit}>
-            Submit
-          </button>
-          <button
-            onClick={() => setShowClearConfirm(true)}
-            disabled={!player}
-            aria-label="Clear scores for this round"
-            style={{
-              border: "1px solid #DCC6C2",
-              borderRadius: 10,
-              padding: "13px 14px",
-              fontSize: 13,
-              fontWeight: 600,
-              fontFamily: "'Inter', sans-serif",
-              background: "#FBF3F1",
-              color: "#A3492E",
-              cursor: player ? "pointer" : "default",
-              opacity: player ? 1 : 0.5,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Clear
-          </button>
-            </>
-          )}
         </div>
+
+        {isViewer ? (
+          <div style={{ fontSize: 12, color: "#8A8371", textAlign: "center", padding: "10px 0" }}>
+            Viewer access — scores here are read-only.
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleSubmitClick}
+              disabled={!canEdit}
+              className={canEdit ? "bco-save-btn" : undefined}
+              style={{ flex: 1, ...(canEdit ? {} : { border: "1px solid #DCD6C4", background: "#EFEBDE", color: "#B4AE9E", borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 600, fontFamily: "'Inter', sans-serif", cursor: "default" }) }}
+            >
+              {status === "submitted" ? "Submitted" : "Submit"}
+            </button>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              disabled={!player || !canEdit}
+              aria-label="Clear scores for this round"
+              style={{
+                flex: 1,
+                border: "1px solid #DCC6C2",
+                borderRadius: 10,
+                padding: "13px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: "'Inter', sans-serif",
+                background: "#FBF3F1",
+                color: "#A3492E",
+                cursor: player && canEdit ? "pointer" : "default",
+                opacity: player && canEdit ? 1 : 0.5,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
       </div>
+
+      {showSubmitConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44, 42, 34, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            zIndex: 50,
+          }}
+        >
+          <div style={{ background: "#FBF8F1", borderRadius: 14, padding: "20px 20px 18px", maxWidth: 320, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#1B4332", marginBottom: 6 }}>Submit {selectedRound} as final?</div>
+            <div style={{ fontSize: 12.5, color: "#6B6455", lineHeight: 1.5, marginBottom: 16 }}>
+              Once submitted, {player?.name}'s scores for this round can't be edited — only an admin will be able to
+              change them.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setShowSubmitConfirm(false)}
+                style={{ flex: 1, border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#2C2A22", borderRadius: 8, padding: "10px 0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSubmit}
+                style={{ flex: 1, border: "none", background: "#1B4332", color: "#F3EFE2", borderRadius: 8, padding: "10px 0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showClearConfirm && (
         <div
@@ -6540,7 +6626,16 @@ const MATCHES_BY_ROUND = {
   ],
 };
 
-function computeMatchProgress(match, round, scoresStore, year, teamsSource) {
+function computeMatchProgress(match, round, scoresStore, year, teamsSource, totalHoles = 18) {
+  // Prefer server-recorded progress when available (live mode) — scoresStore
+  // is only a client-side cache of whatever's been touched via Score entry
+  // in THIS browser session. An imported match, or one finished from a
+  // different session, would never show as finished if this only looked at
+  // scoresStore, since it would simply have no entry there at all.
+  if (match.holesPlayed != null) {
+    return { marker: Math.min(match.holesPlayed, totalHoles), final: match.holesPlayed >= totalHoles };
+  }
+
   let allNames;
   if (match.matchType === "singles") {
     // For singles, teamA/teamB already hold the two players' own names.
@@ -6666,6 +6761,7 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
               colorB: carrollRoster[carrollBId] || null,
               pointsA: totals ? totals.team_a_points : null,
               pointsB: totals ? totals.team_b_points : null,
+              holesPlayed: totals ? totals.holes_played : null,
               roundId: m.roundId,
               matchupId: m.id,
               teamAId: m.teamAId,
@@ -6673,13 +6769,13 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
             };
           })
       : MATCHES_BY_ROUND[round] || [];
-    const withProgress = list.map((m) => ({ ...m, progress: computeMatchProgress(m, round, scoresStore, yr.selectedYear, teamsSource) }));
+    const withProgress = list.map((m) => ({ ...m, progress: computeMatchProgress(m, round, scoresStore, yr.selectedYear, teamsSource, course.holes.length) }));
     return withProgress.sort((a, b) => {
       const av = a.progress.final ? 19 : a.progress.marker;
       const bv = b.progress.final ? 19 : b.progress.marker;
       return bv - av;
     });
-  }, [liveMatchups, liveTeams, liveMatchTotals, carrollRoster, round, scoresStore, yr.selectedYear, teamsSource]);
+  }, [liveMatchups, liveTeams, liveMatchTotals, carrollRoster, round, scoresStore, yr.selectedYear, teamsSource, course]);
 
   if (drilldown) {
     return (
@@ -6918,6 +7014,8 @@ function useYearRoundData(isLive, defaultYear) {
             label: r.label,
             id: r.id,
             courseId: r.course_id,
+            playFormat: r.play_format || "stroke",
+            matchType: r.match_type || "team",
             countsForSolo: r.counts_for_solo !== false,
             countsForTeam: r.counts_for_team !== false,
             countsForCarrollCup: r.counts_for_carroll_cup === true,
@@ -7604,13 +7702,19 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
               };
             });
 
+            // Summed from what's actually visible per round, rather than
+            // trusted from a separately-computed server total — keeps the
+            // Total column honest and auditable even if something upstream
+            // ever double-counts a hidden match the round columns don't show.
+            const pointsFromRounds = roundsDetail.reduce((sum, r) => sum + (r ? r.points : 0), 0);
+
             return {
               id: s.team_id,
               name: s.name,
               playerA: playerAName,
               playerB: playerBName,
               roundsDetail,
-              points: s.total_points,
+              points: pointsFromRounds,
             };
           })
           .sort((a, b) => b.points - a.points);
@@ -8036,27 +8140,52 @@ function CarrollCupTable({ isLive, currentEventId, roundsData }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {matches.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto 1fr",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "#FFFFFF",
-                  border: "1px solid #E4DFCE",
-                  borderRadius: 10,
-                  padding: "9px 12px",
-                }}
-              >
-                <div style={{ textAlign: "right", fontSize: 12.5, color: "#2C2A22" }}>{m.red}</div>
-                <div className="bco-mono" style={{ fontSize: 13, fontWeight: 600, color: "#6B6455", whiteSpace: "nowrap" }}>
-                  {m.redPoints} – {m.bluePoints}
+            {matches.map((m, i) => {
+              const redWon = m.redPoints != null && m.bluePoints != null && m.redPoints > m.bluePoints;
+              const blueWon = m.redPoints != null && m.bluePoints != null && m.bluePoints > m.redPoints;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto 1fr",
+                    alignItems: "center",
+                    gap: 8,
+                    background: "#FFFFFF",
+                    border: "1px solid #E4DFCE",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      textAlign: "right",
+                      fontSize: 12.5,
+                      fontWeight: redWon ? 600 : 400,
+                      color: redWon ? TEAM_COLORS.red.fg : "#2C2A22",
+                      background: redWon ? TEAM_COLORS.red.bg : "transparent",
+                      padding: "9px 12px",
+                    }}
+                  >
+                    {m.red}
+                  </div>
+                  <div className="bco-mono" style={{ fontSize: 13, fontWeight: 600, color: "#6B6455", whiteSpace: "nowrap" }}>
+                    {m.redPoints} – {m.bluePoints}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: blueWon ? 600 : 400,
+                      color: blueWon ? TEAM_COLORS.blue.fg : "#2C2A22",
+                      background: blueWon ? TEAM_COLORS.blue.bg : "transparent",
+                      padding: "9px 12px",
+                    }}
+                  >
+                    {m.blue}
+                  </div>
                 </div>
-                <div style={{ fontSize: 12.5, color: "#2C2A22" }}>{m.blue}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -8173,7 +8302,12 @@ function StatusBadge({ status }) {
 }
 
 function Banner({ tone, children }) {
-  const styles = tone === "error" ? { bg: "#F7DCDA", fg: "#8C2F2A", border: "#D98884" } : { bg: "#DCEFE3", fg: "#1B4332", border: "#6FAE8C" };
+  const styles =
+    tone === "error"
+      ? { bg: "#F7DCDA", fg: "#8C2F2A", border: "#D98884" }
+      : tone === "info"
+      ? { bg: "#F3EFE2", fg: "#6B6455", border: "#DCD6C4" }
+      : { bg: "#DCEFE3", fg: "#1B4332", border: "#6FAE8C" };
   return (
     <div style={{ fontSize: 13, padding: "9px 12px", borderRadius: 8, background: styles.bg, color: styles.fg, border: `1px solid ${styles.border}` }}>
       {children}

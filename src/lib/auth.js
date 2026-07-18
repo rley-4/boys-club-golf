@@ -50,6 +50,22 @@ export async function setPassword(newPassword) {
   if (error) throw error;
 }
 
+// Self-service — sends a fresh recovery link to whatever email is given
+// (safe to call with just the anon key; Supabase never reveals whether the
+// address is actually registered, so this can't be used to enumerate
+// accounts). This is the recovery path for the common case where an
+// original invite link never worked — most often because an email
+// security scanner "pre-visited" it to check for malware before the
+// person ever clicked it themselves, silently consuming the one-time
+// token. A fresh link sidesteps that rather than trying to diagnose it.
+export async function sendPasswordReset(email) {
+  const db = requireClient();
+  const { error } = await db.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+  if (error) throw error;
+}
+
 // -----------------------------------------------------------------------------
 // Player-profile linking
 // -----------------------------------------------------------------------------
