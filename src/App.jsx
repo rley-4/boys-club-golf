@@ -5,7 +5,7 @@ import SetPasswordScreen from "./SetPasswordScreen.jsx";
 import ClaimProfileScreen from "./ClaimProfileScreen.jsx";
 import { supabaseConfigured } from "./lib/supabaseClient.js";
 import { fetchCurrentEvent, fetchPlayers, fetchCourses } from "./lib/api.js";
-import { getSession, onAuthStateChange, fetchMyPlayer } from "./lib/auth.js";
+import { onAuthStateChange, fetchMyPlayer } from "./lib/auth.js";
 
 // Supabase redirects an invite/password-reset link back here with
 // #access_token=...&type=invite (or type=recovery) in the URL hash, and its
@@ -29,10 +29,13 @@ export default function App() {
   // nothing to authenticate against.
   const [authPhase, setAuthPhase] = useState(supabaseConfigured ? "checking" : "authed");
   const [myPlayer, setMyPlayer] = useState(null); // { id, name, is_admin } | null
+  const [checkTimedOut, setCheckTimedOut] = useState(false);
 
   const resolveAfterSignIn = async () => {
+    console.log("[auth] resolving player profile…");
     try {
       const player = await fetchMyPlayer();
+      console.log("[auth] player:", player);
       if (player) {
         setMyPlayer(player);
         setAuthPhase("authed");
@@ -40,7 +43,7 @@ export default function App() {
         setAuthPhase("needs-claim");
       }
     } catch (err) {
-      console.error("Failed to resolve player profile:", err);
+      console.error("[auth] failed to resolve player profile:", err);
       setAuthPhase("needs-claim");
     }
   };
@@ -48,40 +51,42 @@ export default function App() {
   useEffect(() => {
     if (!supabaseConfigured) return;
     let cancelled = false;
+    let handledInitial = false;
 
-    const cameFromInviteLink = urlIndicatesPasswordSetup();
+    // If nothing settles the "checking" phase within 10s — a hung network
+    // call, a Supabase project that's unreachable, etc. — show something
+    // actionable instead of spinning forever with no way to tell what's
+    // wrong.
+    const timeout = setTimeout(() => {
+      if (!cancelled) setCheckTimedOut(true);
+    }, 10000);
 
-    const unsubscribe = onAuthStateChange((_event, session) => {
+    // Relying on onAuthStateChange alone (not also calling getSession()
+    // separately) — it fires immediately with the current state
+    // (INITIAL_SESSION) and again on every future change, and running both
+    // mechanisms in parallel is a known source of race conditions.
+    const unsubscribe = onAuthStateChange((event, session) => {
       if (cancelled) return;
+      console.log("[auth]", event, session ? "session present" : "no session");
+      clearTimeout(timeout); // heard back from Supabase at all — no need for the fallback screen
+
       if (!session) {
         setAuthPhase("needs-login");
+        return;
       }
-      // A real SIGNED_IN/INITIAL_SESSION event with no invite/recovery hash
-      // is handled by the getSession() check below, to avoid double-firing
-      // the player lookup.
+      if (urlIndicatesPasswordSetup()) {
+        setAuthPhase("needs-password");
+        return;
+      }
+      if (!handledInitial || event === "SIGNED_IN") {
+        handledInitial = true;
+        resolveAfterSignIn();
+      }
     });
-
-    (async () => {
-      try {
-        const session = await getSession();
-        if (cancelled) return;
-        if (!session) {
-          setAuthPhase("needs-login");
-          return;
-        }
-        if (cameFromInviteLink) {
-          setAuthPhase("needs-password");
-          return;
-        }
-        await resolveAfterSignIn();
-      } catch (err) {
-        console.error("Failed to check session:", err);
-        if (!cancelled) setAuthPhase("needs-login");
-      }
-    })();
 
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,7 +99,12 @@ export default function App() {
     if (authPhase !== "authed") return;
     let cancelled = false;
 
+    const timeout = setTimeout(() => {
+      if (!cancelled) setCheckTimedOut(true);
+    }, 10000);
+
     async function boot() {
+      console.log("[boot] starting, supabaseConfigured:", supabaseConfigured);
       if (!supabaseConfigured) {
         if (!cancelled) setStatus("ready");
         return;
@@ -102,7 +112,9 @@ export default function App() {
 
       try {
         const event = await fetchCurrentEvent();
+        console.log("[boot] current event:", event);
         const [players, courses] = await Promise.all([fetchPlayers(event.id), fetchCourses()]);
+        console.log("[boot] loaded", players.length, "players,", courses.length, "courses");
 
         if (cancelled) return;
 
@@ -137,10 +149,43 @@ export default function App() {
     boot();
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
   }, [authPhase]);
 
-  if (authPhase === "checking" || status === "loading") {
+  const stillLoading = authPhase === "checking" || (authPhase === "authed" && status === "loading");
+
+  if (stillLoading) {
+    if (checkTimedOut) {
+      return (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100vh",
+            padding: "24px",
+            textAlign: "center",
+            fontFamily: "system-ui, sans-serif",
+            color: "#6B6455",
+          }}
+        >
+          <div style={{ fontWeight: 600, color: "#2C2A22", marginBottom: 8 }}>This is taking longer than expected</div>
+          <div style={{ fontSize: 13, maxWidth: 340, lineHeight: 1.5, marginBottom: 16 }}>
+            Check the browser console for the actual error. Common causes: the Supabase project's Site URL /
+            Redirect URLs (Authentication → URL Configuration) don't include this app's URL, or the invite link has
+            already been used.
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#2C2A22", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
     return (
       <div
         style={{
