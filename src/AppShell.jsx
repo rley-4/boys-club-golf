@@ -2415,6 +2415,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
         const soloPayoutMap = Object.fromEntries(soloPayout.map((p) => [p.player_id, Number(p.amount)]));
         const soloRows = lowNetSolo
           .map((s) => ({
+            id: s.player_id,
             name: PLAYERS.find((p) => p.id === s.player_id)?.name || `Player ${s.player_id}`,
             net: s.net_total,
             gross: grossTotals.find((g) => g.round_id === roundId && g.player_id === s.player_id)?.gross_total ?? null,
@@ -2430,7 +2431,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
             const teamPayoutTotal = [teamMeta?.player_a_id, teamMeta?.player_b_id]
               .filter((id) => id != null)
               .reduce((sum, id) => sum + (teamPayoutMap[id] ?? 0), 0);
-            return { name: teamMeta?.name || `Team ${t.team_id}`, net: t.net_total, payout: teamPayoutTotal };
+            return { id: t.team_id, name: teamMeta?.name || `Team ${t.team_id}`, net: t.net_total, payout: teamPayoutTotal };
           })
           .sort((a, b) => a.net - b.net);
         setLiveTeam(teamRows);
@@ -2487,7 +2488,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
                 No completed solo rounds yet for {round}.
               </div>
             ) : (
-              <table className="bco-table">
+              <table className="bco-table" key="solo-table">
                 <thead>
                   <tr>
                     <th>Player</th>
@@ -2498,7 +2499,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
                 </thead>
                 <tbody>
                   {soloRows.map((p, i) => (
-                    <tr key={p.name}>
+                    <tr key={p.id ?? p.name}>
                       <td style={{ fontSize: 13, fontWeight: 500, color: i === 0 ? "#1B4332" : "#2C2A22" }}>
                         {p.name}
                         {i === 0 && <span style={{ fontSize: 10, color: "#6FAE8C", marginLeft: 6 }}>● low</span>}
@@ -2526,7 +2527,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
               No completed team rounds yet for {round}.
             </div>
           ) : (
-            <table className="bco-table">
+            <table className="bco-table" key="team-table">
               <thead>
                 <tr>
                   <th>Team</th>
@@ -2536,7 +2537,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
               </thead>
               <tbody>
                 {teamRows.map((t, i) => (
-                  <tr key={t.name}>
+                  <tr key={t.id ?? t.name}>
                     <td style={{ fontSize: 13, fontWeight: 500, color: i === 0 ? "#1B4332" : "#2C2A22" }}>
                       {t.name}
                       {i === 0 && <span style={{ fontSize: 10, color: "#6FAE8C", marginLeft: 6 }}>● low</span>}
