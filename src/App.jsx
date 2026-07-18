@@ -53,6 +53,13 @@ export default function App() {
     let cancelled = false;
     let handledInitial = false;
 
+    // Captured immediately, synchronously, before any async work — Supabase
+    // strips the access-token hash from the URL as part of its own internal
+    // processing before it fires onAuthStateChange, so checking the hash
+    // from inside that callback (later, async) is unreliable: the hash may
+    // already be gone by then, silently skipping the password screen.
+    const cameFromInviteLink = urlIndicatesPasswordSetup();
+
     // If nothing settles the "checking" phase within 10s — a hung network
     // call, a Supabase project that's unreachable, etc. — show something
     // actionable instead of spinning forever with no way to tell what's
@@ -74,7 +81,7 @@ export default function App() {
         setAuthPhase("needs-login");
         return;
       }
-      if (urlIndicatesPasswordSetup()) {
+      if (cameFromInviteLink) {
         setAuthPhase("needs-password");
         return;
       }
