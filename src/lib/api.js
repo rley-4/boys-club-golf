@@ -132,6 +132,24 @@ export async function updatePlayer(playerId, { name, hometown, bio }) {
   if (error) throw error;
 }
 
+// -----------------------------------------------------------------------------
+// Roles — admin / player / viewer. See sql/27_roles.sql for what each
+// actually grants; this is just fetching/assigning the label.
+// -----------------------------------------------------------------------------
+
+export async function fetchPlayerRoles() {
+  const db = requireClient();
+  const { data, error } = await db.from("players").select("id, name, role").order("name");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function updatePlayerRole(playerId, role) {
+  const db = requireClient();
+  const { error } = await db.from("players").update({ role }).eq("id", playerId);
+  if (error) throw error;
+}
+
 export async function fetchCourses() {
   const db = requireClient();
   const { data: courses, error: coursesError } = await db.from("courses").select("id, name, tee, rating, slope, holes_count, played_event_id").order("name");
@@ -244,6 +262,28 @@ export async function upsertSubmission(roundId, playerId, status) {
     { onConflict: "round_id,player_id" }
   );
   if (error) throw error;
+}
+
+// Confirms a round still actually belongs to the given event — a fresh,
+// server-side check (not just trusting whatever's cached client-side)
+// before allowing a destructive action like clearing scores. Guards
+// against the admin having changed Current Year in the time since this
+// round was loaded.
+export async function verifyRoundBelongsToEvent(roundId, eventId) {
+  const db = requireClient();
+  const { data, error } = await db.from("rounds").select("event_id").eq("id", roundId).maybeSingle();
+  if (error) throw error;
+  return data?.event_id === eventId;
+}
+
+// Wipes a player's scores (and submission status) for a round — deletes
+// rather than zeroing out, so they start from a genuinely blank card.
+export async function clearScores(roundId, playerId) {
+  const db = requireClient();
+  const { error: scoresError } = await db.from("scores").delete().eq("round_id", roundId).eq("player_id", playerId);
+  if (scoresError) throw scoresError;
+  const { error: submissionError } = await db.from("round_submissions").delete().eq("round_id", roundId).eq("player_id", playerId);
+  if (submissionError) throw submissionError;
 }
 
 // -----------------------------------------------------------------------------

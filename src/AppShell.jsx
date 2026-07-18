@@ -34,6 +34,8 @@ import {
   fetchScoresForRound,
   upsertScores,
   upsertSubmission,
+  clearScores,
+  verifyRoundBelongsToEvent,
   fetchEventByYear,
   fetchPlayers,
   fetchEvents,
@@ -44,6 +46,8 @@ import {
   upsertGameSettings,
   fetchRounds,
   updatePlayer,
+  fetchPlayerRoles,
+  updatePlayerRole,
   updatePlayerHandicap,
   fetchPlayerHandicaps,
   fetchPlayerCompetedYears,
@@ -1097,6 +1101,45 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
     }
   };
 
+  // UX-level only, same as the Admin menu gating — the real enforcement is
+  // RLS (sql/26), not this. Viewers can look at everything on this page,
+  // just can't save.
+  const isViewer = myPlayer?.role === "viewer";
+
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearStatus, setClearStatus] = useState(null); // null | "clearing" | "error"
+
+  const handleClearScores = async () => {
+    if (!player || !roundId) return;
+    setClearStatus("clearing");
+    try {
+      if (isLive && currentEventId) {
+        // Freshness check — the round this page loaded should still
+        // actually belong to whichever year is currently set as Current
+        // Year. Guards against the admin having changed it since this page
+        // was loaded (this app doesn't live-sync across sessions).
+        const belongs = await verifyRoundBelongsToEvent(roundId, currentEventId);
+        if (!belongs) {
+          setClearStatus("error");
+          return;
+        }
+        await clearScores(roundId, player.id);
+      }
+      setScoresStore((prev) => {
+        const next = { ...prev };
+        delete next[storeKey];
+        return next;
+      });
+      setAttemptedSubmit(false);
+      setSaveStatus(null);
+      setShowClearConfirm(false);
+      setClearStatus(null);
+    } catch (err) {
+      console.error("Failed to clear scores:", err);
+      setClearStatus("error");
+    }
+  };
+
   const playerTeam = player ? (liveTeams || TEAMS).find((t) => t.players.includes(player.name)) : null;
   const carrollSide = player ? (liveCarrollRoster ? liveCarrollRoster[player.id] : CARROLL_CUP_ROSTER_DEFAULT[player.name]) : null;
 
@@ -1422,6 +1465,12 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: saveStatus || syncStatus === "sync-error" ? 10 : 0 }}>
           {player && <StatusBadge status={status} />}
+          {isViewer ? (
+            <div style={{ flex: 1, fontSize: 12, color: "#8A8371", textAlign: "center", padding: "10px 0" }}>
+              Viewer access — scores here are read-only.
+            </div>
+          ) : (
+            <>
           <button
             onClick={handleSaveProgress}
             style={{
@@ -1442,8 +1491,89 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
           <button className="bco-save-btn" style={{ flex: 1 }} onClick={handleSubmit}>
             Submit
           </button>
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            disabled={!player}
+            aria-label="Clear scores for this round"
+            style={{
+              border: "1px solid #DCC6C2",
+              borderRadius: 10,
+              padding: "13px 14px",
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "'Inter', sans-serif",
+              background: "#FBF3F1",
+              color: "#A3492E",
+              cursor: player ? "pointer" : "default",
+              opacity: player ? 1 : 0.5,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Clear
+          </button>
+            </>
+          )}
         </div>
       </div>
+
+      {showClearConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44, 42, 34, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            zIndex: 50,
+          }}
+        >
+          <div style={{ background: "#FBF8F1", borderRadius: 14, padding: "20px 20px 18px", maxWidth: 320, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#1B4332", marginBottom: 6 }}>Clear scores for {selectedRound}?</div>
+            <div style={{ fontSize: 12.5, color: "#6B6455", lineHeight: 1.5, marginBottom: 16 }}>
+              This removes every stroke and putt entered for {player?.name} on this round. This can't be undone.
+            </div>
+            {clearStatus === "error" && (
+              <div style={{ marginBottom: 12 }}>
+                <Banner tone="error">
+                  Couldn't clear — this round no longer matches the current year. Refresh the page and try again.
+                </Banner>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => {
+                  setShowClearConfirm(false);
+                  setClearStatus(null);
+                }}
+                style={{ flex: 1, border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#2C2A22", borderRadius: 8, padding: "10px 0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearScores}
+                disabled={clearStatus === "clearing"}
+                style={{
+                  flex: 1,
+                  border: "none",
+                  background: "#A3492E",
+                  color: "#FBF3F1",
+                  borderRadius: 8,
+                  padding: "10px 0",
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "'Inter', sans-serif",
+                  opacity: clearStatus === "clearing" ? 0.7 : 1,
+                }}
+              >
+                {clearStatus === "clearing" ? "Clearing…" : "Clear scores"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
         </>
       )}
     </div>
@@ -2325,7 +2455,7 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
   // keeps the menu honest about what a non-admin can actually do once RLS
   // is on. In demo/offline mode (no real accounts at all) everything stays
   // visible, same as before.
-  const isAdmin = !isLive || myPlayer?.is_admin === true;
+  const isAdmin = !isLive || myPlayer?.role === "admin";
 
   if (view === "recordbook") {
     return <RecordBook onBack={() => setView("menu")} isLive={isLive} />;
@@ -2347,6 +2477,9 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
   }
   if (view === "admin-general") {
     return <YearSettings onBack={() => setView("admin")} currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} />;
+  }
+  if (view === "admin-roles") {
+    return <RolesSettings onBack={() => setView("admin")} isLive={isLive} />;
   }
   if (view === "admin-teams") {
     return <TeamSetupSettings onBack={() => setView("admin")} isLive={isLive} currentYear={currentYear} />;
@@ -2444,6 +2577,7 @@ function AdminMenu({ onBack, onNavigate }) {
     { key: "admin-import", label: "Import results", note: "Upload a CSV of historical scores", icon: BookOpen, enabled: true },
     { key: "admin-export", label: "Export results", note: "Download scores and payouts as CSV", icon: BookOpen, enabled: true },
     { key: "admin-general", label: "Year settings", note: "Every year on record and rounds played", icon: Trophy, enabled: true },
+    { key: "admin-roles", label: "Roles", note: "Access levels and player role assignment", icon: Flag, enabled: true },
     { key: "admin-teams", label: "Team setup", note: "Team pairs and Carroll Cup assignments", icon: Flag, enabled: true },
     { key: "admin-rounds", label: "Round setup", note: "Course, and what each round counts toward", icon: Trophy, enabled: true },
     { key: "admin-matchups", label: "Matchup setup", note: "Team pairings per round, per competition", icon: Swords, enabled: true },
@@ -2542,6 +2676,145 @@ function SettingsSection({ title, description, children }) {
 // same as Players/Courses — becomes the real config source once backend-
 // connected.
 // ---------------------------------------------------------------------------
+const ROLE_INFO = {
+  admin: {
+    label: "Admin",
+    description: "Create, edit, and remove anything — all admin screens, all data.",
+    bg: "#F3EFE2",
+    fg: "#1B4332",
+  },
+  player: {
+    label: "Player",
+    description: "Create and edit only their own scores. Read access to everything else, same as anyone signed in.",
+    bg: "#DCEFE3",
+    fg: "#1B4332",
+  },
+  viewer: {
+    label: "Viewer",
+    description: "Read-only, everywhere — no create or edit access, not even to their own scores. No access to Admin.",
+    bg: "#EFEBDE",
+    fg: "#6B6455",
+  },
+};
+
+function RolesSettings({ onBack, isLive }) {
+  const [players, setPlayers] = useState([]);
+  const [liveLoading, setLiveLoading] = useState(isLive);
+  const [liveError, setLiveError] = useState(null);
+  const [savingId, setSavingId] = useState(null); // playerId currently being saved, or null
+
+  useEffect(() => {
+    if (!isLive) {
+      setLiveLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchPlayerRoles();
+        if (cancelled) return;
+        setPlayers(rows);
+      } catch (err) {
+        console.error("Failed to load roles:", err);
+        setLiveError(err.message || String(err));
+      } finally {
+        if (!cancelled) setLiveLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive]);
+
+  const handleRoleChange = async (playerId, role) => {
+    const previous = players.find((p) => p.id === playerId)?.role;
+    setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, role } : p)));
+    if (!isLive) return;
+    setSavingId(playerId);
+    try {
+      await updatePlayerRole(playerId, role);
+    } catch (err) {
+      console.error("Failed to update role:", err);
+      setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, role: previous } : p)));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <div style={{ padding: "14px 20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
+        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
+          Roles
+        </span>
+      </div>
+
+      <SettingsSection title="What each role can do">
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {Object.entries(ROLE_INFO).map(([key, r]) => (
+            <div key={key} style={{ background: r.bg, borderRadius: 10, padding: "11px 13px" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: r.fg, marginBottom: 3 }}>{r.label}</div>
+              <div style={{ fontSize: 11.5, color: r.fg, opacity: 0.85, lineHeight: 1.5 }}>{r.description}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: "#B4AE9E", marginTop: 8, lineHeight: 1.5 }}>
+          These three are fixed — there's no arbitrary "create a new role" here, since what a role can do is enforced
+          by real database rules, not just app settings.
+        </div>
+      </SettingsSection>
+
+      {isLive && liveError && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner tone="error">Couldn't load live roles ({liveError}) — showing local demo data instead.</Banner>
+        </div>
+      )}
+      {isLive && liveLoading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 14 }}>Loading…</div>}
+
+      {!liveLoading && (
+        <SettingsSection title="Assign roles" description="One role per player. Defaults to Player — switch someone to Viewer if they're not competing this year, or Admin if they help run things.">
+          {!isLive ? (
+            <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>Connect to Supabase to assign roles.</div>
+          ) : players.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No players on the roster yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {players.map((p) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FFFFFF", border: "1px solid #E4DFCE", borderRadius: 10, padding: "9px 12px" }}>
+                  <span style={{ fontSize: 13, color: "#2C2A22" }}>{p.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {savingId === p.id && <span style={{ fontSize: 10, color: "#8A8371" }}>Saving…</span>}
+                    <select
+                      value={p.role || "player"}
+                      onChange={(e) => handleRoleChange(p.id, e.target.value)}
+                      style={{
+                        border: "1px solid #DCD6C4",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        fontSize: 12.5,
+                        fontFamily: "'Inter', sans-serif",
+                        background: "#FFFFFF",
+                        color: "#2C2A22",
+                      }}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="player">Player</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SettingsSection>
+      )}
+    </div>
+  );
+}
+
 function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
   const [years, setYears] = useState(() => RECORD_YEARS.map((y) => ({ id: null, year: y, roundsPlayed: LEADERBOARD_ROUNDS.length, isCurrent: y === currentYear })));
   const [liveLoading, setLiveLoading] = useState(isLive);

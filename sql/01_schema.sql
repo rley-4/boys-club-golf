@@ -40,8 +40,34 @@ create table players (
   bio           text,
   joined_year   integer references events (year),
   is_competing  boolean not null default true,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  auth_user_id  uuid references auth.users (id),
+  role          text not null default 'player' check (role in ('admin', 'player', 'viewer'))
 );
+
+create unique index idx_players_auth_user_id on players (auth_user_id) where auth_user_id is not null;
+
+-- The role linked to whoever's currently authenticated — 'admin', 'player',
+-- or 'viewer'. Postgres RLS policies are code, not admin-editable data, so
+-- this is deliberately a fixed three-tier model rather than an open-ended
+-- roles system: admin can create/edit/remove anything; player can only
+-- create/edit their own scores/round_submissions; viewer can only read.
+create or replace function my_role() returns text
+language sql stable as $$
+  select role from players where auth_user_id = auth.uid();
+$$;
+
+create or replace function is_admin_user() returns boolean
+language sql stable as $$
+  select my_role() = 'admin';
+$$;
+
+-- The player_id linked to the currently-authenticated user, or null if
+-- they haven't claimed a profile yet.
+create or replace function my_player_id() returns integer
+language sql stable as $$
+  select id from players where auth_user_id = auth.uid();
+$$;
 
 -- -----------------------------------------------------------------------------
 -- PLAYER_HANDICAPS — one row per player per year. Mirrors the rule book's

@@ -153,22 +153,24 @@ Both admin screens still show the status (Players: "Competing this year," Course
 
 **Admin → Matchup setup was restructured**: matchups are now grouped under their round (matching how it worked before the Round-Course/Matchup split), with **"Counts toward Team competition" and "Counts toward Carroll Cup" moved to the round level** instead of per-matchup — every matchup in a round shares one setting now, so they can't drift out of sync with each other. Matchup rows are labeled Home team / Away team. This moved the two flags from `round_matchups` to `rounds` in the schema (migration `09_team_setup_and_matchup_rework.sql`) — the old columns on `round_matchups` are left in place, unused, non-destructive.
 
-## Setting up real accounts (Auth)
+## Setting up real accounts (Auth + Roles)
 
-Two migrations, run in order, plus one dashboard step — no code to write.
+Three migrations, run in order, plus one dashboard step — no code to write.
 
-**1. Run `sql/25_auth_player_linking.sql`.** Adds `players.auth_user_id` and `players.is_admin`, plus two helper functions. Safe to run any time — doesn't restrict anything by itself.
+**1. Run `sql/25_auth_player_linking.sql`.** Adds `players.auth_user_id`, plus helper functions. Safe to run any time — doesn't restrict anything by itself.
 
-**2. Make your own account an admin.** Once you've invited and claimed your own profile (next step), run this once in the SQL editor, swapping in your name:
+**2. Run `sql/27_roles.sql`.** Adds `players.role` ('admin' / 'player' / 'viewer', defaulting to 'player') and updates the helper functions to use it. Also safe to run any time on its own.
+
+**3. Make your own account an admin.** Once you've invited and claimed your own profile (next step), either use Admin → Roles in the app once you can reach it, or run this once in the SQL editor, swapping in your name:
 ```sql
-update players set is_admin = true where name = 'Your Name';
+update players set role = 'admin' where name = 'Your Name';
 ```
 
-**3. Invite people — from the Supabase Dashboard, not the app.** Authentication → Users → **Invite user** → enter their email. This is deliberate: sending invites requires the service-role key, which must never live in client-side code, so there's no "send invite" button in the app itself. Each invited person gets an email with a link.
+**4. Invite people — from the Supabase Dashboard, not the app.** Authentication → Users → **Invite user** → enter their email. This is deliberate: sending invites requires the service-role key, which must never live in client-side code, so there's no "send invite" button in the app itself. Each invited person gets an email with a link.
 
-**4. What happens when they click it:** the app detects the invite link, shows a "set your password" screen, then a one-time "which player are you?" screen that links their account to their player row. After that, they just sign in normally.
+**5. What happens when they click it:** the app detects the invite link, shows a "set your password" screen, then a one-time "which player are you?" screen that links their account to their player row. After that, they just sign in normally. New players default to the "player" role — use Admin → Roles afterward to switch anyone to "viewer" (not competing this year) or "admin" (helps run things).
 
-**5. Don't run `sql/26_row_level_security.sql` yet.** Test the full invite → set password → claim → sign-in flow first, with at least one admin account confirmed working. RLS is what actually enforces "you can only edit your own scores" — before it's on, that's just documented intent. Once it's on, the anon key alone can't read or write anything without a signed-in user, so if nobody's claimed the admin account yet, you'd lock yourself out of Admin. Run it only once you're confident login works end to end.
+**6. Don't run `sql/26_row_level_security.sql` yet.** Test the full invite → set password → claim → sign-in flow first, with at least one admin account confirmed working. RLS is what actually enforces the role rules (admin = anything, player = only their own scores, viewer = read-only) — before it's on, that's just documented intent, and the Admin → Roles screen is a UX nicety, not real enforcement. Once RLS is on, the anon key alone can't read or write anything without a signed-in user, so if nobody has an admin role yet, you'd lock yourself out of Admin. Run it only once you're confident login + role assignment works end to end.
 
 **Demo/local mode is untouched** — with no `.env` configured, the app skips the whole login flow and runs on the built-in mock data, same as always.
 

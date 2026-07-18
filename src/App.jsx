@@ -22,16 +22,17 @@ export default function App() {
   const [isLive, setIsLive] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [initialYear, setInitialYear] = useState(undefined);
-  const [viewMode] = useState("mobile");
+  const [viewMode, setViewMode] = useState("mobile");
 
   // "checking" | "needs-password" | "needs-login" | "needs-claim" | "authed"
   // Demo mode (no Supabase configured) skips straight to "authed" — there's
   // nothing to authenticate against.
   const [authPhase, setAuthPhase] = useState(supabaseConfigured ? "checking" : "authed");
-  const [myPlayer, setMyPlayer] = useState(null); // { id, name, is_admin } | null
+  const [myPlayer, setMyPlayer] = useState(null); // { id, name, role } | null
   const [checkTimedOut, setCheckTimedOut] = useState(false);
 
-  const resolveAfterSignIn = async () => {
+  const resolveAfterSignIn = async (mode) => {
+    if (mode) setViewMode(mode);
     console.log("[auth] resolving player profile…");
     try {
       const player = await fetchMyPlayer();

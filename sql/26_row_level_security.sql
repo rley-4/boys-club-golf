@@ -2,16 +2,22 @@
 -- Row Level Security
 -- =============================================================================
 -- DO NOT RUN THIS UNTIL you've tested that login + claiming a player profile
--- actually works end to end (migration 25 + the app's login/claim screens).
--- Once this runs, the anon key alone can no longer read or write anything —
--- every request has to come from a signed-in user, and non-admin writes are
--- restricted to that user's own scores. If nobody has claimed the admin
--- account yet, you could lock yourself out of the Admin screens.
+-- actually works end to end (migrations 25 and 27 + the app's login/claim
+-- screens, and at least one admin role assigned). Once this runs, the anon
+-- key alone can no longer read or write anything — every request has to
+-- come from a signed-in user, and non-admin writes are restricted per the
+-- role model in migration 27. If nobody has an admin role yet, you could
+-- lock yourself out of the Admin screens.
+--
+-- Three-tier role model (see migration 27 for the role column itself):
+--   admin  — create/edit/remove anything.
+--   player — create/edit only their own scores/round_submissions.
+--   viewer — read everything; no create/edit/remove anywhere.
 --
 -- Pattern used throughout: a "read_authenticated" policy (select, open to
--- any signed-in user — leaderboards etc. need this), plus one write policy
--- per table (admin-only for config tables; "own row or admin" for scores
--- and round_submissions specifically).
+-- any signed-in user — leaderboards etc. need this regardless of role),
+-- plus one write policy per table (admin-only for config tables;
+-- "own row, player role, or admin" for scores/round_submissions).
 --
 -- Note on views: this app's leaderboard/stats views (v_solo_standings and
 -- friends) may or may not be affected by these policies depending on how
@@ -40,7 +46,7 @@ alter table game_settings enable row level security;
 alter table poker_results enable row level security;
 alter table team_hole_results enable row level security;
 
--- Read: any signed-in user, every table.
+-- Read: any signed-in user, every table, regardless of role.
 create policy "read_authenticated" on events for select using (auth.role() = 'authenticated');
 create policy "read_authenticated" on players for select using (auth.role() = 'authenticated');
 create policy "read_authenticated" on player_handicaps for select using (auth.role() = 'authenticated');
@@ -59,7 +65,8 @@ create policy "read_authenticated" on game_settings for select using (auth.role(
 create policy "read_authenticated" on poker_results for select using (auth.role() = 'authenticated');
 create policy "read_authenticated" on team_hole_results for select using (auth.role() = 'authenticated');
 
--- Write: admin-only, for every config/admin table.
+-- Write: admin-only, for every config/admin table. Player and viewer roles
+-- get no write access here at all.
 create policy "admin_write" on events for all using (is_admin_user()) with check (is_admin_user());
 create policy "admin_write" on player_handicaps for all using (is_admin_user()) with check (is_admin_user());
 create policy "admin_write" on courses for all using (is_admin_user()) with check (is_admin_user());
@@ -75,19 +82,21 @@ create policy "admin_write" on game_settings for all using (is_admin_user()) wit
 create policy "admin_write" on poker_results for all using (is_admin_user()) with check (is_admin_user());
 create policy "admin_write" on team_hole_results for all using (is_admin_user()) with check (is_admin_user());
 
--- Write: a player can only touch their own scores/submissions — or an admin, any.
+-- Write: only the "player" role can touch their own scores/submissions —
+-- explicitly role-gated, not just "whichever player_id you're linked to",
+-- so a viewer linked to a player row still can't write even their own
+-- scores. Admins can write anyone's.
 create policy "own_or_admin_write" on scores for all
-  using (player_id = my_player_id() or is_admin_user())
-  with check (player_id = my_player_id() or is_admin_user());
+  using ((player_id = my_player_id() and my_role() = 'player') or is_admin_user())
+  with check ((player_id = my_player_id() and my_role() = 'player') or is_admin_user());
 create policy "own_or_admin_write" on round_submissions for all
-  using (player_id = my_player_id() or is_admin_user())
-  with check (player_id = my_player_id() or is_admin_user());
+  using ((player_id = my_player_id() and my_role() = 'player') or is_admin_user())
+  with check ((player_id = my_player_id() and my_role() = 'player') or is_admin_user());
 
--- players: admins can do anything. A claimed user can update their own row
--- (editing their own bio/hometown, say) but can't reassign it to someone
--- else. An UNCLAIMED row (auth_user_id is null) can be claimed by any
--- signed-in user, as long as they're only linking it to themselves — this
--- is the self-service "which player are you" flow on first login.
+-- players: admins can do anything. Any signed-in user can update their own
+-- row (editing their own bio/hometown) or claim an unclaimed one — but see
+-- the trigger below, which stops a non-admin edit from also sneaking a
+-- role change through the same request.
 create policy "admin_write" on players for all using (is_admin_user()) with check (is_admin_user());
 create policy "self_update" on players for update
   using (auth_user_id = auth.uid())
@@ -95,3 +104,24 @@ create policy "self_update" on players for update
 create policy "claim_unclaimed" on players for update
   using (auth_user_id is null)
   with check (auth_user_id = auth.uid());
+
+-- RLS policies restrict which ROWS a query can touch, not which COLUMNS —
+-- on their own, self_update/claim_unclaimed above would let someone set
+-- their own role to 'admin' in the same request that edits their bio. This
+-- trigger silently reverts any role change attempted by a non-admin,
+-- regardless of which policy let the row-level update through.
+create or replace function prevent_self_role_escalation() returns trigger
+language plpgsql as $$
+begin
+  if not is_admin_user() and new.role is distinct from old.role then
+    new.role := old.role;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists players_prevent_self_role_escalation on players;
+create trigger players_prevent_self_role_escalation
+  before update on players
+  for each row
+  execute function prevent_self_role_escalation();

@@ -61,7 +61,7 @@ export async function fetchMyPlayer() {
   const { data: sessionData } = await db.auth.getSession();
   const uid = sessionData?.session?.user?.id;
   if (!uid) return null;
-  const { data, error } = await db.from("players").select("id, name, is_admin").eq("auth_user_id", uid).maybeSingle();
+  const { data, error } = await db.from("players").select("id, name, role").eq("auth_user_id", uid).maybeSingle();
   if (error) throw error;
   return data;
 }

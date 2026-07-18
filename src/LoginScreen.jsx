@@ -4,6 +4,7 @@ import { signInWithPassword } from "./lib/auth.js";
 export default function LoginScreen({ onSignedIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [viewMode, setViewMode] = useState("mobile");
   const [status, setStatus] = useState(null); // null | "loading" | "error"
   const [error, setError] = useState(null);
 
@@ -13,7 +14,7 @@ export default function LoginScreen({ onSignedIn }) {
     setError(null);
     try {
       await signInWithPassword(email.trim(), password);
-      onSignedIn();
+      onSignedIn(viewMode);
     } catch (err) {
       console.error("Sign-in failed:", err);
       setError(err.message || "Couldn't sign in — check your email and password.");
@@ -75,6 +76,43 @@ export default function LoginScreen({ onSignedIn }) {
         />
 
         {status === "error" && <div style={{ fontSize: 11.5, color: "#A3492E", marginBottom: 12, lineHeight: 1.5 }}>{error}</div>}
+
+        <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em" }}>VIEW AS</div>
+        <div style={{ display: "flex", border: "1px solid #DCD6C4", borderRadius: 8, overflow: "hidden", marginBottom: 18 }}>
+          <button
+            onClick={() => setViewMode("mobile")}
+            style={{
+              flex: 1,
+              border: "none",
+              background: viewMode === "mobile" ? "#1B4332" : "#FFFFFF",
+              color: viewMode === "mobile" ? "#F3EFE2" : "#6B6455",
+              padding: "9px 0",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Mobile
+          </button>
+          <button
+            onClick={() => setViewMode("desktop")}
+            style={{
+              flex: 1,
+              border: "none",
+              borderLeft: "1px solid #DCD6C4",
+              background: viewMode === "desktop" ? "#1B4332" : "#FFFFFF",
+              color: viewMode === "desktop" ? "#F3EFE2" : "#6B6455",
+              padding: "9px 0",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Desktop
+          </button>
+        </div>
 
         <button
           onClick={handleSignIn}
