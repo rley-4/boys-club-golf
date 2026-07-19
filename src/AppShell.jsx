@@ -56,6 +56,10 @@ import {
   deleteCompetitionPayoutPlace,
   fetchCompetitionPayouts,
   fetchGrandTotalPayouts,
+  recalculatePayoutSnapshot,
+  fetchPayoutSnapshot,
+  fetchPayoutSnapshotTimestamp,
+  fetchAllPayoutSnapshots,
   fetchSoloTiebreakDetail,
   fetchTeamTiebreakDetail,
   updatePlayer,
@@ -2428,10 +2432,16 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
         const teamRows = lowNetTeam
           .map((t) => {
             const teamMeta = dbTeams.find((dt) => dt.id === t.team_id);
-            const teamPayoutTotal = [teamMeta?.player_a_id, teamMeta?.player_b_id]
-              .filter((id) => id != null)
-              .reduce((sum, id) => sum + (teamPayoutMap[id] ?? 0), 0);
-            return { id: t.team_id, name: teamMeta?.name || `Team ${t.team_id}`, net: t.net_total, payout: teamPayoutTotal };
+            const memberIds = [teamMeta?.player_a_id, teamMeta?.player_b_id].filter((id) => id != null);
+            const shares = memberIds.map((id) => teamPayoutMap[id] ?? 0);
+            const teamPayoutTotal = shares.reduce((sum, s) => sum + s, 0);
+            // Split is always even by construction (v_low_net_team_payout
+            // divides by winning_teams x 2), so any member's share works —
+            // shown explicitly rather than re-deriving it via total/2 in
+            // the render, so the display can never drift from the real
+            // per-player amount if that ever changed.
+            const payoutPerPlayer = shares.length > 0 ? shares[0] : 0;
+            return { id: t.team_id, name: teamMeta?.name || `Team ${t.team_id}`, net: t.net_total, payout: teamPayoutTotal, payoutPerPlayer };
           })
           .sort((a, b) => a.net - b.net);
         setLiveTeam(teamRows);
@@ -2546,7 +2556,7 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
                       {t.net}
                     </td>
                     <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: t.payout > 0 ? 600 : 400, color: t.payout > 0 ? "#1B4332" : "#B4AE9E" }}>
-                      {t.payout > 0 ? `$${t.payout.toFixed(2)} total (both players)` : "–"}
+                      {t.payout > 0 ? `$${t.payoutPerPlayer.toFixed(2)} each ($${t.payout.toFixed(2)} total)` : "–"}
                     </td>
                   </tr>
                 ))}
@@ -3352,19 +3362,24 @@ function TeamSetupSettings({ onBack, isLive, currentYear }) {
       return next;
     });
   };
+  const [addingTeam, setAddingTeam] = useState(false);
   const addTeam = async () => {
+    if (addingTeam) return; // guards against a fast double-click firing two creates
+    setAddingTeam(true);
     const name = `Team ${teams.length + 1}`;
     const playerA = PLAYERS[0]?.name || "";
     const playerB = PLAYERS[1]?.name || "";
-    if (isLive && selectedEventId) {
-      try {
+    try {
+      if (isLive && selectedEventId) {
         const id = await createTeam({ eventId: selectedEventId, name, playerAId: playerNameToId(playerA), playerBId: playerNameToId(playerB) });
         setTeams((prev) => [...prev, { id, name, playerA, playerB }]);
-      } catch (err) {
-        console.error("Failed to add team:", err);
+      } else {
+        setTeams((prev) => [...prev, { id: nextId(), name, playerA, playerB }]);
       }
-    } else {
-      setTeams((prev) => [...prev, { id: nextId(), name, playerA, playerB }]);
+    } catch (err) {
+      console.error("Failed to add team:", err);
+    } finally {
+      setAddingTeam(false);
     }
   };
   const removeTeam = (id) => {
@@ -3447,7 +3462,7 @@ function TeamSetupSettings({ onBack, isLive, currentYear }) {
                   </div>
                 </div>
               ))}
-              <AddRowButton label="+ Add team" onClick={addTeam} />
+              <AddRowButton label={addingTeam ? "Adding…" : "+ Add team"} onClick={addTeam} disabled={addingTeam} />
             </div>
           </SettingsSection>
 
@@ -4112,10 +4127,11 @@ function RemoveButton({ onClick }) {
   );
 }
 
-function AddRowButton({ label, onClick }) {
+function AddRowButton({ label, onClick, disabled = false }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         border: "1px dashed #C9C2AC",
         background: "#FFFFFF",
@@ -4124,7 +4140,8 @@ function AddRowButton({ label, onClick }) {
         padding: "9px 0",
         fontSize: 12.5,
         fontWeight: 600,
-        cursor: "pointer",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.6 : 1,
         fontFamily: "'Inter', sans-serif",
       }}
     >
@@ -4366,11 +4383,73 @@ function GamesSetupSettings({ onBack, isLive, currentYear }) {
 // Games results — the expensive part (payout aggregation across all four
 // games). Kept on its own screen so Setup never has to wait on it.
 // ---------------------------------------------------------------------------
+function formatCalculatedAt(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+// Shared by Games Results and Competition Results — both read from the same
+// payout_snapshots cache, and a single Recalculate refreshes both at once
+// (they're derived together server-side, so there's no meaningful way to
+// refresh just one half without risking them drifting apart).
+function RecalculateControl({ isLive, eventId, lastCalculatedAt, recalculating, onRecalculate }) {
+  return (
+    <div
+      style={{
+        background: "#FFFFFF",
+        border: "1px solid #E4DFCE",
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 14,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+      }}
+    >
+      <div style={{ fontSize: 11.5, color: "#8A8371", lineHeight: 1.4 }}>
+        {lastCalculatedAt ? (
+          <>
+            Last calculated
+            <br />
+            {formatCalculatedAt(lastCalculatedAt)}
+          </>
+        ) : (
+          "Never calculated for this year"
+        )}
+      </div>
+      <button
+        onClick={onRecalculate}
+        disabled={!isLive || !eventId || recalculating}
+        style={{
+          border: "none",
+          background: "#1B4332",
+          color: "#F3EFE2",
+          borderRadius: 8,
+          padding: "9px 16px",
+          fontSize: 12.5,
+          fontWeight: 600,
+          cursor: !isLive || !eventId || recalculating ? "default" : "pointer",
+          opacity: !isLive || !eventId || recalculating ? 0.6 : 1,
+          fontFamily: "'Inter', sans-serif",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {recalculating ? "Recalculating…" : "Recalculate"}
+      </button>
+    </div>
+  );
+}
+
 function GamesResultsSettings({ onBack, isLive, currentYear }) {
   const [years, setYears] = useState([currentYear]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [payouts, setPayouts] = useState([]);
+  const [lastCalculatedAt, setLastCalculatedAt] = useState(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcError, setRecalcError] = useState(null);
   const [liveLoading, setLiveLoading] = useState(isLive);
   const [liveError, setLiveError] = useState(null);
 
@@ -4391,6 +4470,12 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
     };
   }, [isLive]);
 
+  const loadSnapshot = async (eventId) => {
+    const [snapshotRows, ts] = await Promise.all([fetchPayoutSnapshot(eventId), fetchPayoutSnapshotTimestamp(eventId)]);
+    setPayouts(snapshotRows);
+    setLastCalculatedAt(ts);
+  };
+
   useEffect(() => {
     if (!isLive) {
       setLiveLoading(false);
@@ -4399,6 +4484,7 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
     let cancelled = false;
     setLiveLoading(true);
     setLiveError(null);
+    setRecalcError(null);
     (async () => {
       try {
         const event = await fetchEventByYear(selectedYear);
@@ -4406,12 +4492,11 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
         if (!event) {
           setSelectedEventId(null);
           setPayouts([]);
+          setLastCalculatedAt(null);
           return;
         }
         setSelectedEventId(event.id);
-        const payoutRows = await fetchPlayerYearPayouts(event.id);
-        if (cancelled) return;
-        setPayouts(payoutRows);
+        await loadSnapshot(event.id);
       } catch (err) {
         console.error("Failed to load game payouts:", err);
         setLiveError(err.message || String(err));
@@ -4423,6 +4508,21 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
       cancelled = true;
     };
   }, [isLive, selectedYear]);
+
+  const handleRecalculate = async () => {
+    if (!selectedEventId) return;
+    setRecalculating(true);
+    setRecalcError(null);
+    try {
+      await recalculatePayoutSnapshot(selectedEventId);
+      await loadSnapshot(selectedEventId);
+    } catch (err) {
+      console.error("Failed to recalculate payouts:", err);
+      setRecalcError(err.message || String(err));
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
@@ -4442,9 +4542,9 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
       </SettingsSection>
 
       <AutoComputedNote>
-        Computed live from actual results across all four games — nothing to update by hand. Buy-ins assume anyone
-        who logged a score for a round bought into every game flagged applicable for it that round. Buy-in amounts
-        are set on Games Setup.
+        Cached, not live — these numbers are whatever the last "Recalculate" produced, not recomputed on every
+        visit. Buy-ins assume anyone who logged a score for a round bought into every game flagged applicable for it
+        that round. Buy-in amounts are set on Games Setup. This same cache also feeds Players and Record Book.
       </AutoComputedNote>
 
       {isLive && liveError && (
@@ -4460,11 +4560,19 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
       )}
 
       {!liveLoading && (
-        <SettingsSection title={`Player payouts — ${selectedYear}`}>
+        <>
+          <RecalculateControl isLive={isLive} eventId={selectedEventId} lastCalculatedAt={lastCalculatedAt} recalculating={recalculating} onRecalculate={handleRecalculate} />
+          {recalcError && (
+            <div style={{ marginBottom: 14 }}>
+              <Banner tone="error">Couldn't recalculate ({recalcError}).</Banner>
+            </div>
+          )}
+
+          <SettingsSection title={`Player payouts — ${selectedYear}`}>
           {!isLive ? (
             <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>Connect to Supabase to see payouts.</div>
           ) : payouts.length === 0 ? (
-            <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No results recorded yet for {selectedYear}.</div>
+            <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No results recorded yet for {selectedYear} — click Recalculate above.</div>
           ) : (
             <table className="bco-table">
               <thead>
@@ -4477,16 +4585,21 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
               </thead>
               <tbody>
                 {payouts
-                  .map((p) => ({ ...p, name: PLAYERS.find((pl) => pl.id === p.player_id)?.name || `Player ${p.player_id}` }))
+                  .map((p) => ({
+                    ...p,
+                    name: PLAYERS.find((pl) => pl.id === p.player_id)?.name || `Player ${p.player_id}`,
+                    net: Number(p.game_winnings) - Number(p.game_buy_ins),
+                  }))
+                  .filter((p) => Number(p.game_winnings) > 0 || Number(p.game_buy_ins) > 0)
                   .sort((a, b) => b.net - a.net)
                   .map((p) => (
                     <tr key={p.player_id}>
                       <td style={{ fontSize: 13, fontWeight: 500, color: "#2C2A22" }}>{p.name}</td>
                       <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
-                        ${Number(p.total_buy_ins).toFixed(2)}
+                        ${Number(p.game_buy_ins).toFixed(2)}
                       </td>
                       <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
-                        ${Number(p.total_winnings).toFixed(2)}
+                        ${Number(p.game_winnings).toFixed(2)}
                       </td>
                       <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: Number(p.net) >= 0 ? "#1B4332" : "#A3492E" }}>
                         {Number(p.net) >= 0 ? "+" : ""}
@@ -4497,7 +4610,8 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
               </tbody>
             </table>
           )}
-        </SettingsSection>
+          </SettingsSection>
+        </>
       )}
     </div>
   );
@@ -4787,6 +4901,9 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [teamsForYear, setTeamsForYear] = useState([]);
   const [payouts, setPayouts] = useState([]);
+  const [lastCalculatedAt, setLastCalculatedAt] = useState(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcError, setRecalcError] = useState(null);
   const [soloTiebreaks, setSoloTiebreaks] = useState([]);
   const [teamTiebreaks, setTeamTiebreaks] = useState([]);
   const [liveLoading, setLiveLoading] = useState(isLive);
@@ -4809,6 +4926,12 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
     };
   }, [isLive]);
 
+  const loadPayoutSnapshot = async (eventId) => {
+    const [snapshotRows, ts] = await Promise.all([fetchPayoutSnapshot(eventId), fetchPayoutSnapshotTimestamp(eventId)]);
+    setPayouts(snapshotRows);
+    setLastCalculatedAt(ts);
+  };
+
   useEffect(() => {
     if (!isLive) {
       setLiveLoading(false);
@@ -4817,6 +4940,7 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
     let cancelled = false;
     setLiveLoading(true);
     setLiveError(null);
+    setRecalcError(null);
     (async () => {
       try {
         const event = await fetchEventByYear(selectedYear);
@@ -4824,22 +4948,22 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
         if (!event) {
           setSelectedEventId(null);
           setPayouts([]);
+          setLastCalculatedAt(null);
           setSoloTiebreaks([]);
           setTeamTiebreaks([]);
           return;
         }
         setSelectedEventId(event.id);
-        const [teamsRows, payoutRows, soloTb, teamTb] = await Promise.all([
+        const [teamsRows, soloTb, teamTb] = await Promise.all([
           fetchTeams(event.id),
-          fetchCompetitionPayouts(event.id),
           fetchSoloTiebreakDetail(event.id),
           fetchTeamTiebreakDetail(event.id),
         ]);
         if (cancelled) return;
         setTeamsForYear(teamsRows);
-        setPayouts(payoutRows);
         setSoloTiebreaks(soloTb);
         setTeamTiebreaks(teamTb);
+        await loadPayoutSnapshot(event.id);
       } catch (err) {
         console.error("Failed to load competition results:", err);
         setLiveError(err.message || String(err));
@@ -4851,6 +4975,21 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
       cancelled = true;
     };
   }, [isLive, selectedYear]);
+
+  const handleRecalculate = async () => {
+    if (!selectedEventId) return;
+    setRecalculating(true);
+    setRecalcError(null);
+    try {
+      await recalculatePayoutSnapshot(selectedEventId);
+      await loadPayoutSnapshot(selectedEventId);
+    } catch (err) {
+      console.error("Failed to recalculate payouts:", err);
+      setRecalcError(err.message || String(err));
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
@@ -4935,6 +5074,13 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
             )}
           </SettingsSection>
 
+          <RecalculateControl isLive={isLive} eventId={selectedEventId} lastCalculatedAt={lastCalculatedAt} recalculating={recalculating} onRecalculate={handleRecalculate} />
+          {recalcError && (
+            <div style={{ marginBottom: 14 }}>
+              <Banner tone="error">Couldn't recalculate ({recalcError}).</Banner>
+            </div>
+          )}
+
           <SettingsSection
             title={`Competition payouts — ${selectedYear}`}
             description="Player | Buy-ins | Winnings | Net, combined across Solo, Team, and Carroll Cup."
@@ -4942,7 +5088,7 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
             {!isLive ? (
               <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>Connect to Supabase to see payouts.</div>
             ) : payouts.length === 0 ? (
-              <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No payout places set, or no final standings yet for {selectedYear}.</div>
+              <div style={{ fontSize: 11.5, color: "#B4AE9E" }}>No payout places set, or no final standings yet for {selectedYear} — click Recalculate above.</div>
             ) : (
               <table className="bco-table">
                 <thead>
@@ -4955,16 +5101,21 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
                 </thead>
                 <tbody>
                   {payouts
-                    .map((p) => ({ ...p, name: PLAYERS.find((pl) => pl.id === p.player_id)?.name || `Player ${p.player_id}` }))
+                    .map((p) => ({
+                      ...p,
+                      name: PLAYERS.find((pl) => pl.id === p.player_id)?.name || `Player ${p.player_id}`,
+                      net: Number(p.competition_winnings) - Number(p.competition_buy_ins),
+                    }))
+                    .filter((p) => Number(p.competition_winnings) > 0 || Number(p.competition_buy_ins) > 0)
                     .sort((a, b) => b.net - a.net)
                     .map((p) => (
                       <tr key={p.player_id}>
                         <td style={{ fontSize: 13, fontWeight: 500, color: "#2C2A22" }}>{p.name}</td>
                         <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
-                          ${Number(p.total_buy_ins).toFixed(2)}
+                          ${Number(p.competition_buy_ins).toFixed(2)}
                         </td>
                         <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
-                          ${Number(p.total_winnings).toFixed(2)}
+                          ${Number(p.competition_winnings).toFixed(2)}
                         </td>
                         <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: Number(p.net) >= 0 ? "#1B4332" : "#A3492E" }}>
                           {Number(p.net) >= 0 ? "+" : ""}
@@ -5740,6 +5891,7 @@ function PlayersScreen({ onBack, isLive, currentEventId, currentYear }) {
   const [competedYearsByPlayer, setCompetedYearsByPlayer] = useState({}); // playerId -> [eventId, ...]
   const [competedSaving, setCompetedSaving] = useState({}); // "playerId-eventId" -> "saving" | "error"
   const [filterYears, setFilterYears] = useState([]); // selected event ids — multi-select, empty = show all
+  const [allPayoutSnapshots, setAllPayoutSnapshots] = useState([]);
 
   useEffect(() => {
     if (!isLive) return;
@@ -5756,6 +5908,26 @@ function PlayersScreen({ onBack, isLive, currentEventId, currentYear }) {
         setCompetedYearsByPlayer((prev) => ({ ...map, ...prev }));
       } catch (err) {
         console.error("Failed to load players' competed years:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive]);
+
+  // Cached payout snapshot — same source as Record Book's Earnings tab, not
+  // a live computation. Fetched once, filtered per-player when their card
+  // expands.
+  useEffect(() => {
+    if (!isLive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchAllPayoutSnapshots();
+        if (cancelled) return;
+        setAllPayoutSnapshots(rows);
+      } catch (err) {
+        console.error("Failed to load payout snapshots:", err);
       }
     })();
     return () => {
@@ -6246,6 +6418,28 @@ function PlayersScreen({ onBack, isLive, currentEventId, currentYear }) {
                         </div>
                         {!isLive && <div style={{ fontSize: 9.5, color: "#B4AE9E", marginTop: 4 }}>Connect to Supabase to save this.</div>}
                       </div>
+
+                      {isLive && (
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ fontSize: 12, color: "#6B6455", marginBottom: 6 }}>Earnings (all-time)</div>
+                          {(() => {
+                            const rows = allPayoutSnapshots.filter((s) => s.player_id === p.id);
+                            if (rows.length === 0) {
+                              return <div style={{ fontSize: 10.5, color: "#B4AE9E" }}>No cached earnings yet — an admin needs to recalculate at least one year.</div>;
+                            }
+                            const winnings = rows.reduce((sum, r) => sum + Number(r.total_winnings), 0);
+                            const buyIns = rows.reduce((sum, r) => sum + Number(r.total_buy_ins), 0);
+                            const net = winnings - buyIns;
+                            return (
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                                <StatBlock label="Buy-ins" value={`$${buyIns.toFixed(2)}`} />
+                                <StatBlock label="Winnings" value={`$${winnings.toFixed(2)}`} />
+                                <StatBlock label="Net" value={`${net >= 0 ? "+" : ""}$${net.toFixed(2)}`} />
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
 
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
                         <span style={{ fontSize: 12, color: "#6B6455" }}>Competing this year</span>
@@ -7000,6 +7194,13 @@ function RecordBook({ onBack, isLive }) {
   const [liveTeamLoading, setLiveTeamLoading] = useState(isLive);
   const [liveTeamError, setLiveTeamError] = useState(null);
 
+  // Earnings — reads the cached payout snapshot (see Admin > Games/Competition
+  // Results for how it gets populated), not a live computation.
+  const [liveEarningsYears, setLiveEarningsYears] = useState([]); // [{id, year}]
+  const [liveEarnings, setLiveEarnings] = useState(null); // raw payout_snapshots rows
+  const [liveEarningsLoading, setLiveEarningsLoading] = useState(isLive);
+  const [liveEarningsError, setLiveEarningsError] = useState(null);
+
   useEffect(() => {
     if (!isLive || mode !== "solo") {
       setLiveLoading(false);
@@ -7059,6 +7260,32 @@ function RecordBook({ onBack, isLive }) {
         setLiveTeamError(err.message || String(err));
       } finally {
         if (!cancelled) setLiveTeamLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, mode]);
+
+  useEffect(() => {
+    if (!isLive || mode !== "earnings") {
+      setLiveEarningsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLiveEarningsLoading(true);
+    setLiveEarningsError(null);
+    (async () => {
+      try {
+        const [events, snapshotRows] = await Promise.all([fetchEvents(), fetchAllPayoutSnapshots()]);
+        if (cancelled) return;
+        setLiveEarningsYears(events.map((e) => ({ id: e.id, year: e.year })).sort((a, b) => b.year - a.year));
+        setLiveEarnings(snapshotRows);
+      } catch (err) {
+        console.error("Failed to load earnings:", err);
+        setLiveEarningsError(err.message || String(err));
+      } finally {
+        if (!cancelled) setLiveEarningsLoading(false);
       }
     })();
     return () => {
@@ -7168,7 +7395,13 @@ function RecordBook({ onBack, isLive }) {
 
   const baseRecords = mode === "solo" ? (liveSoloRecords || soloRecordsSorted) : (liveTeamRecords || teamRecordsSorted);
   const yearOptions =
-    mode === "solo" && isLiveSolo ? liveYears.map((y) => y.year) : mode === "team" && isLiveTeam ? liveTeamYears.map((y) => y.year) : RECORD_YEARS;
+    mode === "solo" && isLiveSolo
+      ? liveYears.map((y) => y.year)
+      : mode === "team" && isLiveTeam
+      ? liveTeamYears.map((y) => y.year)
+      : mode === "earnings"
+      ? liveEarningsYears.map((y) => y.year)
+      : RECORD_YEARS;
 
   const displayRows = useMemo(() => {
     if (year === "all") return baseRecords.map((p) => ({ p, yearStat: null }));
@@ -7230,6 +7463,15 @@ function RecordBook({ onBack, isLive }) {
         >
           Team
         </button>
+        <button
+          className={`bco-seg-btn${mode === "earnings" ? " active" : ""}`}
+          onClick={() => {
+            setMode("earnings");
+            setYear("all");
+          }}
+        >
+          Earnings
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 10 }}>
@@ -7251,7 +7493,17 @@ function RecordBook({ onBack, isLive }) {
         </div>
       )}
       {mode === "team" && isLive && liveTeamLoading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 10 }}>Loading…</div>}
+      {mode === "earnings" && isLive && liveEarningsError && (
+        <div style={{ marginBottom: 10 }}>
+          <Banner tone="error">Couldn't load earnings ({liveEarningsError}).</Banner>
+        </div>
+      )}
+      {mode === "earnings" && isLive && liveEarningsLoading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 10 }}>Loading…</div>}
 
+      {mode === "earnings" ? (
+        <EarningsTable snapshots={liveEarnings || []} years={liveEarningsYears} year={year} loading={isLive && liveEarningsLoading} isLive={isLive} />
+      ) : (
+        <>
       <div style={{ fontSize: 10.5, color: "#A39C89", marginBottom: 10, lineHeight: 1.5 }}>
         {year === "all"
           ? "Sorted by average finish. Tap a player for full stats."
@@ -7351,7 +7603,82 @@ function RecordBook({ onBack, isLive }) {
           );
         })}
       </div>
+      </>
+      )}
     </div>
+  );
+}
+
+function EarningsTable({ snapshots, years, year, loading, isLive }) {
+  if (!isLive) {
+    return <div style={{ fontSize: 12, color: "#B4AE9E", textAlign: "center", padding: "24px 12px" }}>Connect to Supabase to see earnings.</div>;
+  }
+  if (loading) {
+    return <div style={{ fontSize: 12, color: "#8A8371", textAlign: "center", padding: "24px 12px" }}>Loading…</div>;
+  }
+
+  const eventIdForYear = year === "all" ? null : years.find((y) => y.year === year)?.id;
+  const filtered = year === "all" ? snapshots : snapshots.filter((s) => s.event_id === eventIdForYear);
+
+  // All-time: sum across every cached year. Per-year: that year's row as-is.
+  const byPlayer = {};
+  filtered.forEach((s) => {
+    if (!byPlayer[s.player_id]) byPlayer[s.player_id] = { winnings: 0, buyIns: 0 };
+    byPlayer[s.player_id].winnings += Number(s.total_winnings);
+    byPlayer[s.player_id].buyIns += Number(s.total_buy_ins);
+  });
+  const rows = Object.entries(byPlayer)
+    .map(([playerId, r]) => ({
+      playerId: Number(playerId),
+      name: PLAYERS.find((p) => p.id === Number(playerId))?.name || `Player ${playerId}`,
+      winnings: r.winnings,
+      buyIns: r.buyIns,
+      net: r.winnings - r.buyIns,
+    }))
+    .sort((a, b) => b.net - a.net);
+
+  if (rows.length === 0) {
+    return (
+      <div style={{ fontSize: 12, color: "#B4AE9E", textAlign: "center", padding: "24px 12px", lineHeight: 1.5 }}>
+        No cached earnings {year === "all" ? "yet" : `for ${year}`} — an admin needs to click Recalculate on Games
+        Results or Competition Results first.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ fontSize: 10.5, color: "#A39C89", marginBottom: 10, lineHeight: 1.5 }}>
+        {year === "all" ? "All-time, across every year with cached results." : `${year} only.`} Combines Games and
+        Competition payouts. Reflects whenever an admin last recalculated — not necessarily this instant.
+      </div>
+      <table className="bco-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th style={{ textAlign: "right" }}>Buy-ins</th>
+            <th style={{ textAlign: "right" }}>Winnings</th>
+            <th style={{ textAlign: "right" }}>Net</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.playerId}>
+              <td style={{ fontSize: 13, fontWeight: 500, color: "#2C2A22" }}>{r.name}</td>
+              <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
+                ${r.buyIns.toFixed(2)}
+              </td>
+              <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, color: "#8A8371" }}>
+                ${r.winnings.toFixed(2)}
+              </td>
+              <td className="bco-mono" style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: r.net >= 0 ? "#1B4332" : "#A3492E" }}>
+                {r.net >= 0 ? "+" : ""}${r.net.toFixed(2)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 }
 
@@ -7848,6 +8175,50 @@ function YearRoundPicker({ years, selectedYear, setSelectedYear }) {
   );
 }
 
+function ordinal(n) {
+  if (n == null) return "";
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+// Walks a list already sorted by yearRank and, for each pair of
+// consecutive rows that share the same primary tiebreak value (net-to-par
+// for Solo, points for Team), explains what separated them — either which
+// tiebreak level resolved it, or that they're genuinely tied and split the
+// payout. Only compares immediate neighbors, so a 3+-way tie shows as a
+// short chain (A beat B, B beat C) rather than one combined statement —
+// simple to generate and reads naturally either way.
+function buildTiebreakMessages(rows) {
+  const messages = [];
+  const trueTieGroupStarted = new Set();
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1];
+    const cur = rows[i];
+    if (prev.total !== cur.total) continue; // different primary value — not tied, nothing to explain
+    if (!cur.decidedBy || cur.decidedBy === "Outright") continue;
+    if (cur.decidedBy === "True tie") {
+      if (!trueTieGroupStarted.has(prev.name)) {
+        messages.push(`${prev.name} and ${cur.name} tied for ${ordinal(prev.yearRank)} — payout split evenly.`);
+        trueTieGroupStarted.add(prev.name);
+      }
+      continue;
+    }
+    const level = cur.decidedBy.replace(/^Tiebreak:\s*/, "");
+    messages.push(`${prev.name} finished ${ordinal(prev.yearRank)} after winning the ${level} tiebreak over ${cur.name}.`);
+  }
+  return messages;
+}
+
 function Leaderboard({ isLive, currentEventId, currentYear }) {
   const [mode, setMode] = useState("solo");
   const [scoreView, setScoreView] = useState("net"); // "net" | "gross" — Solo only
@@ -7949,13 +8320,15 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
     let cancelled = false;
     (async () => {
       try {
-        const [standings, netTotals, grossTotals] = await Promise.all([
+        const [standings, netTotals, grossTotals, tiebreaks] = await Promise.all([
           fetchSoloStandings(currentEventId),
           fetchSoloRoundTotals(currentEventId),
           fetchSoloRoundGrossTotals(currentEventId),
+          fetchSoloTiebreakDetail(currentEventId),
         ]);
         if (cancelled) return;
 
+        const tiebreakByPlayer = Object.fromEntries(tiebreaks.map((t) => [t.player_id, t]));
         const localRoundIdByLabel = Object.fromEntries((roundsData || []).map((r) => [r.label, r.id]));
         const roundIdToLabel = {};
         rounds.forEach((label) => {
@@ -7968,6 +8341,7 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
             const player = PLAYERS.find((p) => p.id === s.player_id);
             const myNet = netTotals.filter((r) => r.player_id === s.player_id);
             const myGross = grossTotals.filter((r) => r.player_id === s.player_id);
+            const tb = tiebreakByPlayer[s.player_id];
 
             const roundsNet = rounds.map((label) => {
               const roundId = localRoundIdByLabel[label];
@@ -8002,9 +8376,11 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
               total: s.total_net_to_par,
               totalAllRounds: s.total_net_to_par_all_rounds,
               droppedIndex,
+              yearRank: tb?.year_rank ?? null,
+              decidedBy: tb?.decided_by ?? null,
             };
           })
-          .sort((a, b) => a.total - b.total || a.totalAllRounds - b.totalAllRounds);
+          .sort((a, b) => (a.yearRank ?? Infinity) - (b.yearRank ?? Infinity) || a.total - b.total);
 
         setLiveRows(rows);
       } catch (err) {
@@ -8033,6 +8409,7 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
   }
 
   const rows = liveRows || soloResults.map((p) => ({ name: p.name, rounds: p.rounds, roundsGross: p.roundsGross, total: p.total, totalAllRounds: p.total, droppedIndex: p.droppedIndex }));
+  const tiebreakMessages = buildTiebreakMessages(rows);
 
   const showEmptyState = isLive && !liveLoading && !liveError && liveRows && liveRows.length === 0;
   const showTable = !liveLoading && !showEmptyState;
@@ -8066,13 +8443,14 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
           </thead>
           <tbody>
             {(() => {
-              // Place is always by Net-to-par (p.total), regardless of the
-              // Net/Gross or Strokes/To Par toggles — standard competition
-              // ranking, with ties broken by totalAllRounds (the rule
-              // book's tiebreaker) before anyone actually shares a rank.
+              // Rank comes straight from yearRank (the full 5-level
+              // tiebreak cascade, already resolved server-side) when it's
+              // available. Falls back to the old shallow (total,
+              // totalAllRounds) comparison only for mock/offline data,
+              // which never has yearRank at all.
               let currentRank = 0;
               let prevKey = null;
-              const ranks = rows.map((p, i) => {
+              const fallbackRanks = rows.map((p, i) => {
                 const key = `${p.total}-${p.totalAllRounds ?? 0}`;
                 if (prevKey === null || key !== prevKey) {
                   currentRank = i + 1;
@@ -8091,8 +8469,11 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
               };
 
               return rows.map((p, i) => {
-                const rank = ranks[i];
-                const isTie = rows.filter((r) => r.total === p.total && (r.totalAllRounds ?? 0) === (p.totalAllRounds ?? 0)).length > 1;
+                const rank = p.yearRank ?? fallbackRanks[i];
+                // Only a genuine tie that survived every tiebreak level
+                // gets the T prefix — anyone a tiebreak actually resolved
+                // gets their own distinct place, not a shared one.
+                const isTie = p.yearRank != null ? p.decidedBy === "True tie" : rows.filter((r) => r.total === p.total && (r.totalAllRounds ?? 0) === (p.totalAllRounds ?? 0)).length > 1;
                 const medal = rank === 1 ? MEDAL_TONES.gold : rank === 2 ? MEDAL_TONES.silver : rank === 3 ? MEDAL_TONES.bronze : null;
                 const displayRounds = scoreView === "gross" ? p.roundsGross : p.rounds;
                 const effectiveDropIdx = scoreView === "net" ? p.droppedIndex : -1;
@@ -8177,6 +8558,20 @@ function SoloTable({ scoreView, displayUnit, isLive, currentEventId, currentYear
             })()}
           </tbody>
         </table>
+      )}
+      {showTable && tiebreakMessages.length > 0 && (
+        <div style={{ marginTop: 12, background: "#F3EFE2", borderRadius: 10, padding: "10px 12px" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: "#8A8371", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            Tiebreakers applied
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {tiebreakMessages.map((msg, i) => (
+              <div key={i} style={{ fontSize: 12, color: "#3F3B32", lineHeight: 1.5 }}>
+                {msg}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -8466,13 +8861,15 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
     let cancelled = false;
     (async () => {
       try {
-        const [dbTeams, standings, matchTotals] = await Promise.all([
+        const [dbTeams, standings, matchTotals, tiebreaks] = await Promise.all([
           fetchTeams(currentEventId),
           fetchTeamStandings(currentEventId),
           fetchTeamMatchTotals(currentEventId),
+          fetchTeamTiebreakDetail(currentEventId),
         ]);
         if (cancelled) return;
 
+        const tiebreakByTeam = Object.fromEntries(tiebreaks.map((t) => [t.team_id, t]));
         const teamIdToName = (id) => dbTeams.find((t) => t.id === id)?.name || standings.find((s) => s.team_id === id)?.name || `Team ${id}`;
 
         const rows = standings
@@ -8481,6 +8878,7 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
             const playerAName = PLAYERS.find((p) => p.id === teamMeta?.player_a_id)?.name || "?";
             const playerBName = PLAYERS.find((p) => p.id === teamMeta?.player_b_id)?.name || "?";
             const teamMatches = matchTotals.filter((m) => m.team_a_id === s.team_id || m.team_b_id === s.team_id);
+            const tb = tiebreakByTeam[s.team_id];
 
             const roundsDetail = rounds.map((label) => {
               const match = teamMatches.find((m) => m.roundLabel === label);
@@ -8512,9 +8910,12 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
               playerB: playerBName,
               roundsDetail,
               points: pointsFromRounds,
+              total: pointsFromRounds,
+              yearRank: tb?.year_rank ?? null,
+              decidedBy: tb?.decided_by ?? null,
             };
           })
-          .sort((a, b) => b.points - a.points);
+          .sort((a, b) => (a.yearRank ?? Infinity) - (b.yearRank ?? Infinity) || b.points - a.points);
 
         setLiveRows(rows);
       } catch (err) {
@@ -8555,8 +8956,10 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
         playerB,
         roundsDetail: t.pointsByRound.map((v) => (v == null ? null : { points: v, roundId: null, teamAId: null, teamBId: null })),
         points: t.points,
+        total: t.points,
       };
     });
+  const tiebreakMessages = buildTiebreakMessages(rows);
 
   const showEmptyState = isLive && !liveLoading && !liveError && liveRows && liveRows.length === 0;
   const showTable = !liveLoading && !showEmptyState;
@@ -8592,7 +8995,7 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
             {(() => {
               let currentRank = 0;
               let prevPoints = null;
-              const ranks = rows.map((t, i) => {
+              const fallbackRanks = rows.map((t, i) => {
                 if (prevPoints === null || t.points !== prevPoints) {
                   currentRank = i + 1;
                   prevPoints = t.points;
@@ -8600,7 +9003,8 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
                 return currentRank;
               });
               return rows.map((t, i) => {
-                const rank = ranks[i];
+                const rank = t.yearRank ?? fallbackRanks[i];
+                const isTie = t.yearRank != null ? t.decidedBy === "True tie" : rows.filter((r) => r.points === t.points).length > 1;
                 const medal = rank === 1 ? MEDAL_TONES.gold : rank === 2 ? MEDAL_TONES.silver : rank === 3 ? MEDAL_TONES.bronze : null;
                 return (
                   <tr key={t.id}>
@@ -8616,7 +9020,7 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
                           padding: medal ? "2px 7px" : 0,
                         }}
                       >
-                        {rank}
+                        {isTie ? `T${rank}` : rank}
                       </span>
                     </td>
                 <td>
@@ -8656,6 +9060,20 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
             })()}
           </tbody>
         </table>
+      )}
+      {showTable && tiebreakMessages.length > 0 && (
+        <div style={{ marginTop: 12, background: "#F3EFE2", borderRadius: 10, padding: "10px 12px" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: "#8A8371", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            Tiebreakers applied
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {tiebreakMessages.map((msg, i) => (
+              <div key={i} style={{ fontSize: 12, color: "#3F3B32", lineHeight: 1.5 }}>
+                {msg}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

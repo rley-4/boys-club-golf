@@ -300,3 +300,22 @@ create table if not exists competition_payout_places (
   amount       numeric(8,2) not null default 0,
   unique (event_id, competition, place)
 );
+
+-- Cached payout results, per player per year — see calculations.sql /
+-- migration 35 for why this is a real table rather than a view. Populated
+-- by the "Recalculate" action, not written to directly by the app
+-- otherwise.
+create table if not exists payout_snapshots (
+  id                     serial primary key,
+  event_id               integer not null references events (id) on delete cascade,
+  player_id              integer not null references players (id) on delete cascade,
+  game_winnings          numeric(10,2) not null default 0,
+  game_buy_ins           numeric(10,2) not null default 0,
+  competition_winnings   numeric(10,2) not null default 0,
+  competition_buy_ins    numeric(10,2) not null default 0,
+  total_winnings         numeric(10,2) not null default 0,
+  total_buy_ins          numeric(10,2) not null default 0,
+  net                    numeric(10,2) not null default 0,
+  calculated_at          timestamptz not null default now(),
+  unique (event_id, player_id)
+);

@@ -147,6 +147,102 @@ export async function fetchGrandTotalPayouts(eventId) {
   return data || [];
 }
 
+// -----------------------------------------------------------------------------
+// Payout snapshots — the cache layer. Recalculate re-runs the real (live)
+// computation and overwrites the cached rows for one year; everything else
+// just reads whatever was last cached, no live computation involved.
+// -----------------------------------------------------------------------------
+
+// Re-derives every player's payout numbers for one year from the live
+// views and overwrites the cached snapshot for that year. This is the only
+// place that ever touches the expensive queries — everything else reads
+// the cache this leaves behind.
+export async function recalculatePayoutSnapshot(eventId) {
+  const db = requireClient();
+  const [gameRows, competitionRows] = await Promise.all([fetchPlayerYearPayouts(eventId), fetchCompetitionPayouts(eventId)]);
+
+  const byPlayer = {};
+  const ensure = (playerId) => {
+    if (!byPlayer[playerId]) {
+      byPlayer[playerId] = { game_winnings: 0, game_buy_ins: 0, competition_winnings: 0, competition_buy_ins: 0 };
+    }
+    return byPlayer[playerId];
+  };
+  gameRows.forEach((r) => {
+    const row = ensure(r.player_id);
+    row.game_winnings = Number(r.total_winnings);
+    row.game_buy_ins = Number(r.total_buy_ins);
+  });
+  competitionRows.forEach((r) => {
+    const row = ensure(r.player_id);
+    row.competition_winnings = Number(r.total_winnings);
+    row.competition_buy_ins = Number(r.total_buy_ins);
+  });
+
+  const calculatedAt = new Date().toISOString();
+  const snapshotRows = Object.entries(byPlayer).map(([playerId, r]) => {
+    const total_winnings = r.game_winnings + r.competition_winnings;
+    const total_buy_ins = r.game_buy_ins + r.competition_buy_ins;
+    return {
+      event_id: eventId,
+      player_id: Number(playerId),
+      game_winnings: r.game_winnings,
+      game_buy_ins: r.game_buy_ins,
+      competition_winnings: r.competition_winnings,
+      competition_buy_ins: r.competition_buy_ins,
+      total_winnings,
+      total_buy_ins,
+      net: total_winnings - total_buy_ins,
+      calculated_at: calculatedAt,
+    };
+  });
+
+  // Clear the old snapshot for this year first, so a player with no payout
+  // rows this time around (e.g. a correction removed their only win)
+  // doesn't linger with stale numbers.
+  const { error: deleteError } = await db.from("payout_snapshots").delete().eq("event_id", eventId);
+  if (deleteError) throw deleteError;
+
+  if (snapshotRows.length > 0) {
+    const { error: insertError } = await db.from("payout_snapshots").insert(snapshotRows);
+    if (insertError) throw insertError;
+  }
+
+  return { calculatedAt, playerCount: snapshotRows.length };
+}
+
+// The cached snapshot for one year — what Games Results and Competition
+// Results actually read from (not the live views).
+export async function fetchPayoutSnapshot(eventId) {
+  const db = requireClient();
+  const { data, error } = await db.from("payout_snapshots").select("*").eq("event_id", eventId);
+  if (error) throw error;
+  return data || [];
+}
+
+// When a year's snapshot was last recalculated — null if it never has been.
+export async function fetchPayoutSnapshotTimestamp(eventId) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("payout_snapshots")
+    .select("calculated_at")
+    .eq("event_id", eventId)
+    .order("calculated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.calculated_at || null;
+}
+
+// Every cached snapshot across every year — for Record Book's all-time
+// Earnings rollup and a player's full earnings history on Players.
+export async function fetchAllPayoutSnapshots() {
+  const db = requireClient();
+  const { data, error } = await db.from("payout_snapshots").select("event_id, player_id, total_winnings, total_buy_ins, net");
+  if (error) throw error;
+  return data || [];
+}
+
 export async function fetchPlayerYearPayouts(eventId) {
   const db = requireClient();
   const { data, error } = await db
