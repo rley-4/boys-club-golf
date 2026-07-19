@@ -236,7 +236,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: "24px 12px", minHeight: "100vh", background: "#EFEAE0" }}>
+    <div className="bco-page-wrapper">
       <AppShell initialYear={initialYear} isLive={isLive} loadError={loadError} myPlayer={myPlayer} />
     </div>
   );

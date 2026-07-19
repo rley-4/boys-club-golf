@@ -91,6 +91,8 @@ import {
   upsertCarrollCupAssignment,
 } from "./lib/api.js";
 import { Flag, Trophy, Coins, MoreHorizontal, BookOpen, ChevronRight, ChevronLeft, Swords, User, Calendar, Users, Import, Upload } from "lucide-react";
+import { ThemeProvider, Paper, BottomNavigation, BottomNavigationAction } from "@mui/material";
+import theme from "./theme.js";
 
 // ---------------------------------------------------------------------------
 // Courses. In the real app this comes from a `courses` table (name, rating,
@@ -599,12 +601,6 @@ const SHARED_STYLES = `
   }
   .bco-save-btn:active { transform: scale(0.99); }
   .bco-chip-missing { border: 1px dashed #C9564F !important; }
-  .bco-tab-btn {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-    padding: 9px 0 8px; background: none; border: none; cursor: pointer;
-    color: #A39C89; font-size: 10.5px; font-weight: 600; font-family: 'Inter', sans-serif;
-  }
-  .bco-tab-btn.active { color: #1B4332; }
   .bco-seg { display: flex; background: #EDEAE0; border-radius: 9px; padding: 3px; gap: 3px; }
   .bco-seg-btn {
     flex: 1; border: none; background: none; padding: 7px 0; border-radius: 7px;
@@ -620,43 +616,47 @@ const SHARED_STYLES = `
   table.bco-table td { padding: 9px 6px; border-bottom: 1px solid #EFEBDE; vertical-align: middle; }
 
   /* Responsive shell — fluid with the actual browser width, not a fixed
-     toggle. Narrow viewports get a bottom tab bar and a phone-ish column
-     width; wider viewports get a sidebar and more breathing room, with a
-     capped reading width so a single-column app doesn't stretch edge to
-     edge on an ultrawide monitor. */
+     toggle. Mobile fills the actual viewport edge-to-edge (100vw/100vh,
+     never more — no page-level scroll of its own) with a fixed bottom
+     nav; desktop keeps the centered card with a sidebar. */
+  .bco-page-wrapper { padding: 0; min-height: 100vh; background: transparent; }
   .bco-shell {
-    width: 100%;
-    max-width: 460px;
-    margin: 0 auto;
-    min-height: 600px;
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    margin: 0;
     display: flex;
     flex-direction: column;
     font-family: 'Inter', system-ui, sans-serif;
     background: #FBF8F1;
-    border: 1px solid #DCD6C4;
-    border-radius: 16px;
+    border: none;
+    border-radius: 0;
     overflow: hidden;
   }
-  .bco-shell-content { flex: 1; overflow-y: auto; }
+  /* Bottom padding here is what keeps the fixed MUI bottom nav (56px tall,
+     plus any iOS home-indicator inset) from covering the last bit of
+     content on every screen — every screen's content scrolls inside this
+     div, so one padding rule here covers all of them. */
+  .bco-shell-content { flex: 1; overflow-y: auto; padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
   .bco-sidebar { display: none; }
-  .bco-bottombar { display: flex; border-top: 1px solid #E4DFCE; background: #F3EFE2; }
   .bco-content-inner { max-width: none; margin: 0; }
+  .bco-bottombar-mui { display: block; }
 
   @media (min-width: 768px) {
     .bco-shell {
-      max-width: 900px;
-      height: 85vh;
-      min-height: 600px;
       flex-direction: row;
     }
+    .bco-shell-content { padding-bottom: 0; }
     .bco-sidebar {
       display: flex; flex-direction: column;
       width: 190px; flex-shrink: 0;
       border-right: 1px solid #E4DFCE; background: #F3EFE2;
       padding: 18px 10px;
+      overflow-y: auto;
     }
-    .bco-bottombar { display: none; }
-    .bco-content-inner { max-width: 560px; margin: 0 auto; }
+    .bco-content-inner { max-width: 720px; margin: 0 auto; }
+    .bco-bottombar-mui { display: none; }
   }
 `;
 
@@ -780,7 +780,7 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
   );
 
   return (
-    <div>
+    <ThemeProvider theme={theme}>
       <style>{SHARED_STYLES}</style>
       <div className="bco-shell">
         <div className="bco-sidebar">
@@ -822,20 +822,36 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
           <div className="bco-content-inner">{screenContent}</div>
         </div>
 
-        <div className="bco-bottombar">
-          {TABS.map((t) => {
-            const Icon = t.icon;
-            const active = activeTab === t.key;
-            return (
-              <button key={t.key} className={`bco-tab-btn${active ? " active" : ""}`} onClick={() => setActiveTab(t.key)}>
-                <Icon size={19} strokeWidth={active ? 2.3 : 1.8} />
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
+        <Paper
+          elevation={3}
+          className="bco-bottombar-mui"
+          sx={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          <BottomNavigation showLabels value={activeTab} onChange={(event, newValue) => setActiveTab(newValue)} sx={{ bgcolor: "#F3EFE2", height: 56 }}>
+            {TABS.map((t) => {
+              const Icon = t.icon;
+              const active = activeTab === t.key;
+              return (
+                <BottomNavigationAction
+                  key={t.key}
+                  label={t.label}
+                  value={t.key}
+                  icon={<Icon size={20} strokeWidth={active ? 2.3 : 1.8} />}
+                  sx={{
+                    color: "#A39C89",
+                    minWidth: 0,
+                    padding: "6px 0",
+                    fontFamily: "'Inter', sans-serif",
+                    "&.Mui-selected": { color: "#1B4332" },
+                    "& .MuiBottomNavigationAction-label": { fontSize: "10.5px !important", fontWeight: 600, fontFamily: "'Inter', sans-serif" },
+                  }}
+                />
+              );
+            })}
+          </BottomNavigation>
+        </Paper>
       </div>
-    </div>
+    </ThemeProvider>
   );
 }
 
@@ -1623,7 +1639,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
             alignItems: "center",
             justifyContent: "center",
             padding: 20,
-            zIndex: 50,
+            zIndex: 100,
           }}
         >
           <div style={{ background: "#FBF8F1", borderRadius: 14, padding: "20px 20px 18px", maxWidth: 320, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.25)" }}>
@@ -1660,7 +1676,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
             alignItems: "center",
             justifyContent: "center",
             padding: 20,
-            zIndex: 50,
+            zIndex: 100,
           }}
         >
           <div style={{ background: "#FBF8F1", borderRadius: 14, padding: "20px 20px 18px", maxWidth: 320, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.25)" }}>
@@ -1872,6 +1888,7 @@ function PokerPanel({ round, year, isLive, roundId }) {
   const [liveError, setLiveError] = useState(null);
   const [winnerChoice, setWinnerChoice] = useState("");
   const [saveStatus, setSaveStatus] = useState(null); // null | "saving" | "error"
+  const [editingWinner, setEditingWinner] = useState(false);
 
   const loadLive = async () => {
     if (!isLive || !roundId) {
@@ -1896,6 +1913,7 @@ function PokerPanel({ round, year, isLive, roundId }) {
     setLivePayout(null);
     setWinnerChoice("");
     setSaveStatus(null);
+    setEditingWinner(false);
     loadLive();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLive, roundId]);
@@ -1922,6 +1940,7 @@ function PokerPanel({ round, year, isLive, roundId }) {
       await loadLive();
       setWinnerChoice("");
       setSaveStatus(null);
+      setEditingWinner(false);
     } catch (err) {
       console.error("Failed to save poker winner:", err);
       setSaveStatus("error");
@@ -1987,10 +2006,23 @@ function PokerPanel({ round, year, isLive, roundId }) {
 
           {isRealData && (
             <div style={{ marginTop: 14, background: "#FFFFFF", border: "1px solid #E4DFCE", borderRadius: 10, padding: 14 }}>
-              {winnerName ? (
+              {winnerName && !editingWinner ? (
                 <div>
-                  <div style={{ fontSize: 10.5, color: "#8A8371" }}>Winner</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#1B4332" }}>{winnerName}</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 10.5, color: "#8A8371" }}>Winner</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: "#1B4332" }}>{winnerName}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setWinnerChoice(String(livePayout.winner_player_id));
+                        setEditingWinner(true);
+                      }}
+                      style={{ border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#6B6455", borderRadius: 8, padding: "6px 12px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+                    >
+                      Change winner
+                    </button>
+                  </div>
                   <div className="bco-mono" style={{ fontSize: 13, color: "#6B6455", marginTop: 2 }}>
                     ${Number(livePayout.pot).toFixed(2)} pot
                   </div>
@@ -2001,7 +2033,9 @@ function PokerPanel({ round, year, isLive, roundId }) {
                 </div>
               ) : (
                 <>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#6B6455", marginBottom: 8 }}>Record the winner</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#6B6455", marginBottom: 8 }}>
+                    {winnerName ? "Change the winner" : "Record the winner"}
+                  </div>
                   {saveStatus === "error" && (
                     <div style={{ marginBottom: 8 }}>
                       <Banner tone="error">Couldn't save — try again.</Banner>
@@ -2037,6 +2071,18 @@ function PokerPanel({ round, year, isLive, roundId }) {
                     >
                       {saveStatus === "saving" ? "Saving…" : "Save"}
                     </button>
+                    {winnerName && (
+                      <button
+                        onClick={() => {
+                          setEditingWinner(false);
+                          setWinnerChoice("");
+                          setSaveStatus(null);
+                        }}
+                        style={{ border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#8A8371", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </div>
                 </>
               )}
