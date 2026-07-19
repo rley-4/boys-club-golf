@@ -786,3 +786,32 @@ export async function upsertTeamHoleResult(roundId, teamId, holeNumber, { netSco
     .upsert({ round_id: roundId, team_id: teamId, hole_number: holeNumber, net_score: netScore, points }, { onConflict: "round_id,team_id,hole_number" });
   if (error) throw error;
 }
+
+// -----------------------------------------------------------------------------
+// Messages — simple group chat, one shared room. See sql/39_messages.sql
+// for who can read/send/delete.
+// -----------------------------------------------------------------------------
+
+export async function fetchMessages(limit = 200) {
+  const db = requireClient();
+  const { data, error } = await db
+    .from("messages")
+    .select("id, player_id, body, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).slice().reverse(); // oldest first, for a normal chat reading order
+}
+
+export async function sendMessage(playerId, body) {
+  const db = requireClient();
+  const { error } = await db.from("messages").insert({ player_id: playerId, body });
+  if (error) throw error;
+}
+
+export async function deleteMessage(id) {
+  const db = requireClient();
+  const { error } = await db.from("messages").delete().eq("id", id);
+  if (error) throw error;
+}
+

@@ -77,6 +77,9 @@ import {
   fetchTeams,
   fetchTeamHoleResults,
   upsertTeamHoleResult,
+  fetchMessages,
+  sendMessage,
+  deleteMessage,
   createTeam,
   updateTeam,
   deleteTeam,
@@ -90,7 +93,7 @@ import {
   fetchCarrollCupRoster,
   upsertCarrollCupAssignment,
 } from "./lib/api.js";
-import { Flag, Trophy, Coins, MoreHorizontal, BookOpen, ChevronRight, ChevronLeft, Swords, User, Calendar, Users, Import, Upload } from "lucide-react";
+import { Flag, Trophy, Coins, MoreHorizontal, BookOpen, ChevronRight, ChevronLeft, Swords, User, Calendar, Users, Import, Upload, MessagesSquare } from "lucide-react";
 import { ThemeProvider, Paper, BottomNavigation, BottomNavigationAction } from "@mui/material";
 import theme from "./theme.js";
 
@@ -557,6 +560,7 @@ const TABS = [
   { key: "leaderboard", label: "Leaderboard", icon: Trophy },
   { key: "matches", label: "Matches", icon: Swords },
   { key: "games", label: "Games", icon: Coins },
+  { key: "messages", label: "Messages", icon: MessagesSquare },
   { key: "more", label: "More", icon: MoreHorizontal },
 ];
 
@@ -640,8 +644,9 @@ const SHARED_STYLES = `
      div, so one padding rule here covers all of them. */
   .bco-shell-content { flex: 1; overflow-y: auto; padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
   .bco-sidebar { display: none; }
-  .bco-content-inner { max-width: none; margin: 0; }
+  .bco-content-inner { max-width: none; margin: 0; height: 100%; }
   .bco-bottombar-mui { display: block; }
+  .bco-score-header, .bco-score-footer { border-radius: 0; }
 
   @media (min-width: 768px) {
     .bco-shell {
@@ -655,8 +660,9 @@ const SHARED_STYLES = `
       padding: 18px 10px;
       overflow-y: auto;
     }
-    .bco-content-inner { max-width: 720px; margin: 0 auto; }
+    .bco-content-inner { max-width: 720px; margin: 0 auto; height: 100%; }
     .bco-bottombar-mui { display: none; }
+    .bco-score-header, .bco-score-footer { border-radius: 14px; }
   }
 `;
 
@@ -773,6 +779,7 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
       {activeTab === "leaderboard" && <Leaderboard isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />}
       {activeTab === "matches" && <MatchResultsTab scoresStore={scoresStore} currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
       {activeTab === "games" && <GamesTab currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
+      {activeTab === "messages" && <MessagesScreen isLive={isLive} myPlayer={myPlayer} />}
       {activeTab === "more" && (
         <More currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} currentEventId={currentEventId} refreshRoundMap={refreshRoundMap} myPlayer={myPlayer} />
       )}
@@ -1250,7 +1257,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
           <Banner tone="error">Couldn't load live data from Supabase ({loadError}) — showing local demo data instead.</Banner>
         </div>
       )}
-      <div style={{ background: "#1B4332", color: "#F3EFE2", padding: "14px 16px" }}>
+      <div className="bco-score-header" style={{ background: "#1B4332", color: "#F3EFE2", padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <select
             className="bco-mono"
@@ -1543,7 +1550,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-around", borderTop: "1px solid #E4DFCE", padding: "14px 20px", background: "#F3EFE2" }}>
+      <div className="bco-score-footer" style={{ display: "flex", justifyContent: "space-around", borderTop: "1px solid #E4DFCE", padding: "14px 20px", background: "#F3EFE2" }}>
         <TotalStat label="OUT" value={totals.scoredOut ? totals.out : "–"} sub={`par ${totals.parOut}`} />
         {course.holes.length > 9 && <TotalStat label="IN" value={totals.scoredIn ? totals.inn : "–"} sub={`par ${totals.parIn}`} />}
         <TotalStat label="TOTAL" value={totals.scoredOut + totals.scoredIn ? totals.tot : "–"} sub={`par ${totals.parOut + totals.parIn}`} emphasize />
@@ -1815,13 +1822,11 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
 
         <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
 
-        <div style={{ marginBottom: 14 }}>
-          <LightSelect
-            value={round}
-            onChange={setRound}
-            options={(isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS).map((r) => ({ value: r, label: r }))}
-          />
-        </div>
+        <RoundPicker
+          rounds={isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS}
+          selectedRound={round}
+          setSelectedRound={setRound}
+        />
 
         <div className="bco-seg" style={{ marginBottom: 16 }}>
           {GAME_MODES.map((g) => (
@@ -1857,6 +1862,215 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
           ) : (
             <LowNetPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} />
           ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Messages — simple group chat. One shared room, everyone signed in can
+// read, admin/player roles can send (see sql/39_messages.sql). Polls
+// rather than using a realtime subscription — good enough for v1, simple
+// to reason about; worth upgrading to Supabase Realtime later if the
+// polling delay ever actually bothers people.
+// ---------------------------------------------------------------------------
+function MessagesScreen({ isLive, myPlayer }) {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(isLive);
+  const [error, setError] = useState(null);
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const listRef = useRef(null);
+  const wasAtBottomRef = useRef(true);
+
+  const load = async () => {
+    try {
+      const rows = await fetchMessages();
+      setMessages(rows);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to load messages:", err);
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isLive) {
+      setLoading(false);
+      return;
+    }
+    load();
+    const interval = setInterval(load, 8000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    // Only auto-scroll if the person was already near the bottom — if
+    // they've scrolled up to read history, a new message (or a poll tick)
+    // shouldn't yank them back down.
+    if (wasAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    wasAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+
+  const canSend = isLive && myPlayer && (myPlayer.role === "admin" || myPlayer.role === "player");
+
+  const handleSend = async () => {
+    const trimmed = body.trim();
+    if (!trimmed || !canSend || sending) return;
+    setSending(true);
+    try {
+      await sendMessage(myPlayer.id, trimmed);
+      setBody("");
+      wasAtBottomRef.current = true;
+      await load();
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      setError(err.message || String(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+      await deleteMessage(id);
+    } catch (err) {
+      console.error("Failed to delete message:", err);
+      load(); // put it back if the delete didn't actually go through
+    }
+  };
+
+  const formatTime = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  };
+
+  if (!isLive) {
+    return (
+      <div style={{ padding: "24px 20px", textAlign: "center" }}>
+        <div className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332", marginBottom: 10 }}>
+          Messages
+        </div>
+        <div style={{ fontSize: 12.5, color: "#B4AE9E" }}>Connect to Supabase to use the group chat.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ padding: "14px 20px 10px", borderBottom: "1px solid #E4DFCE" }}>
+        <div className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
+          Messages
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ padding: "8px 20px 0" }}>
+          <Banner tone="error">Couldn't load messages ({error}).</Banner>
+        </div>
+      )}
+
+      <div ref={listRef} onScroll={handleScroll} style={{ flex: 1, overflowY: "auto", padding: "14px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {loading ? (
+          <div style={{ fontSize: 12, color: "#8A8371", textAlign: "center", padding: "24px 0" }}>Loading…</div>
+        ) : messages.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "#B4AE9E", textAlign: "center", padding: "24px 0" }}>No messages yet — be the first to say something.</div>
+        ) : (
+          messages.map((m) => {
+            const sender = PLAYERS.find((p) => p.id === m.player_id);
+            const isMine = myPlayer && m.player_id === myPlayer.id;
+            const canDelete = myPlayer && (isMine || myPlayer.role === "admin");
+            return (
+              <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start" }}>
+                {!isMine && (
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "#8A8371", marginBottom: 2, marginLeft: 2 }}>{sender?.name || "Unknown"}</div>
+                )}
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 6, maxWidth: "80%" }}>
+                  {isMine && canDelete && (
+                    <button
+                      onClick={() => handleDelete(m.id)}
+                      aria-label="Delete message"
+                      style={{ border: "none", background: "none", color: "#C9C2AC", cursor: "pointer", fontSize: 13, padding: 2, flexShrink: 0 }}
+                    >
+                      ×
+                    </button>
+                  )}
+                  <div
+                    style={{
+                      background: isMine ? "#DCEFE3" : "#FFFFFF",
+                      border: isMine ? "none" : "1px solid #E4DFCE",
+                      color: "#2C2A22",
+                      borderRadius: 14,
+                      padding: "8px 12px",
+                      fontSize: 13.5,
+                      lineHeight: 1.4,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {m.body}
+                  </div>
+                </div>
+                <div style={{ fontSize: 9.5, color: "#B4AE9E", marginTop: 2, marginRight: isMine ? 2 : 0, marginLeft: isMine ? 0 : 2 }}>{formatTime(m.created_at)}</div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div style={{ borderTop: "1px solid #E4DFCE", padding: "10px 20px", flexShrink: 0 }}>
+        {!canSend ? (
+          <div style={{ fontSize: 11.5, color: "#B4AE9E", textAlign: "center", padding: "8px 0" }}>
+            {myPlayer?.role === "viewer" ? "Viewer access — read-only." : "Sign in with a linked player account to send messages."}
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="text"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Message the group…"
+              maxLength={2000}
+              style={{ flex: 1, border: "1px solid #DCD6C4", borderRadius: 20, padding: "10px 16px", fontSize: 13.5, fontFamily: "'Inter', sans-serif" }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!body.trim() || sending}
+              style={{
+                border: "none",
+                borderRadius: 20,
+                padding: "10px 18px",
+                fontSize: 13.5,
+                fontWeight: 600,
+                fontFamily: "'Inter', sans-serif",
+                background: body.trim() ? "#1B4332" : "#DCD6C4",
+                color: "#F3EFE2",
+                cursor: body.trim() ? "pointer" : "default",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {sending ? "…" : "Send"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -7971,13 +8185,11 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
 
       <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
 
-      <div style={{ marginBottom: 10 }}>
-        <LightSelect
-          value={round}
-          onChange={setRound}
-          options={(isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS).map((r) => ({ value: r, label: r }))}
-        />
-      </div>
+      <RoundPicker
+        rounds={isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS}
+        selectedRound={round}
+        setSelectedRound={setRound}
+      />
 
       <div style={{ fontSize: 10.5, color: "#A39C89", marginBottom: 14 }}>
         {yr.selectedYear} · {course.name} · course handicaps shown are for {round} · sorted by progress
@@ -8221,6 +8433,17 @@ function YearRoundPicker({ years, selectedYear, setSelectedYear }) {
   );
 }
 
+function RoundPicker({ rounds, selectedRound, setSelectedRound }) {
+  if (rounds.length === 0) return null;
+  return (
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 10 }}>
+      {rounds.map((r) => (
+        <YearPill key={r} label={r} active={selectedRound === r} onClick={() => setSelectedRound(r)} />
+      ))}
+    </div>
+  );
+}
+
 function ordinal(n) {
   if (n == null) return "";
   const rem100 = n % 100;
@@ -8270,15 +8493,13 @@ function Leaderboard({ isLive, currentEventId, currentYear }) {
   const [scoreView, setScoreView] = useState("net"); // "net" | "gross" — Solo only
   const [displayUnit, setDisplayUnit] = useState("toPar"); // "toPar" | "strokes" — Solo only
   const yr = useYearRoundData(isLive, currentYear);
-  const lastRoundLabel = yr.rounds.length > 0 ? yr.rounds[yr.rounds.length - 1].label : SCORE_ROUNDS[SCORE_ROUNDS.length - 1];
 
   return (
     <div style={{ padding: "18px 20px 24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+      <div style={{ marginBottom: 14 }}>
         <span className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332" }}>
           Leaderboard
         </span>
-        <span style={{ fontSize: 11, color: "#8A8371" }}>through {lastRoundLabel}</span>
       </div>
 
       <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />

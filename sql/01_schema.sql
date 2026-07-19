@@ -319,3 +319,22 @@ create table if not exists payout_snapshots (
   calculated_at          timestamptz not null default now(),
   unique (event_id, player_id)
 );
+
+-- Simple group chat — one shared room. See sql/39_messages.sql for the
+-- reasoning behind who can send vs. just read.
+create table if not exists messages (
+  id          serial primary key,
+  player_id   integer not null references players (id) on delete cascade,
+  body        text not null check (length(trim(body)) > 0 and length(body) <= 2000),
+  created_at  timestamptz not null default now()
+);
+
+alter table messages enable row level security;
+
+create policy "read_authenticated" on messages for select using (auth.role() = 'authenticated');
+
+create policy "send_own" on messages for insert
+  with check (player_id = my_player_id() and my_role() in ('admin', 'player'));
+
+create policy "delete_own_or_admin" on messages for delete
+  using (player_id = my_player_id() or is_admin_user());
