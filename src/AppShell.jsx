@@ -778,7 +778,7 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
       )}
       {activeTab === "leaderboard" && <Leaderboard isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />}
       {activeTab === "matches" && <MatchResultsTab scoresStore={scoresStore} currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
-      {activeTab === "games" && <GamesTab currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
+      {activeTab === "games" && <GamesTab currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} myPlayer={myPlayer} />}
       {activeTab === "messages" && <MessagesScreen isLive={isLive} myPlayer={myPlayer} />}
       {activeTab === "more" && (
         <More currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} currentEventId={currentEventId} refreshRoundMap={refreshRoundMap} myPlayer={myPlayer} />
@@ -1787,7 +1787,7 @@ function GameNotApplicable({ round, game }) {
   );
 }
 
-function GamesTab({ currentYear, isLive, currentEventId }) {
+function GamesTab({ currentYear, isLive, currentEventId, myPlayer }) {
   const yr = useYearRoundData(isLive, currentYear);
   const [round, setRound] = useState(SCORE_ROUNDS[0]);
   const [mode, setMode] = useState("poker");
@@ -1842,7 +1842,7 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
           (flags.appliesPoker === false ? (
             <GameNotApplicable round={round} game="Poker" />
           ) : (
-            <PokerPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} />
+            <PokerPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} myPlayer={myPlayer} />
           ))}
         {mode === "skins" &&
           (flags.appliesSkins === false ? (
@@ -1854,7 +1854,7 @@ function GamesTab({ currentYear, isLive, currentEventId }) {
           (flags.appliesCtp === false ? (
             <GameNotApplicable round={round} game="CTP" />
           ) : (
-            <CtpPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} course={course} />
+            <CtpPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} course={course} myPlayer={myPlayer} />
           ))}
         {mode === "lownet" &&
           (flags.appliesLowNet === false ? (
@@ -2095,7 +2095,13 @@ function AutoComputedNote({ children }) {
   );
 }
 
-function PokerPanel({ round, year, isLive, roundId }) {
+function PokerPanel({ round, year, isLive, roundId, myPlayer }) {
+  // UX-level only, same as the Admin menu gating and Score entry's viewer
+  // gating — the real enforcement is RLS (poker_results is admin-only
+  // write); this just stops non-admins from hitting a confusing generic
+  // "Couldn't save" error for a control they were never going to be
+  // allowed to use.
+  const isAdmin = myPlayer?.role === "admin";
   const [liveCards, setLiveCards] = useState(null); // null = use mock POKER_PREVIEW
   const [livePayout, setLivePayout] = useState(null); // null = no winner recorded yet
   const [liveLoading, setLiveLoading] = useState(isLive);
@@ -2227,15 +2233,17 @@ function PokerPanel({ round, year, isLive, roundId }) {
                       <div style={{ fontSize: 10.5, color: "#8A8371" }}>Winner</div>
                       <div style={{ fontSize: 15, fontWeight: 600, color: "#1B4332" }}>{winnerName}</div>
                     </div>
-                    <button
-                      onClick={() => {
-                        setWinnerChoice(String(livePayout.winner_player_id));
-                        setEditingWinner(true);
-                      }}
-                      style={{ border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#6B6455", borderRadius: 8, padding: "6px 12px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-                    >
-                      Change winner
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          setWinnerChoice(String(livePayout.winner_player_id));
+                          setEditingWinner(true);
+                        }}
+                        style={{ border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#6B6455", borderRadius: 8, padding: "6px 12px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+                      >
+                        Change winner
+                      </button>
+                    )}
                   </div>
                   <div className="bco-mono" style={{ fontSize: 13, color: "#6B6455", marginTop: 2 }}>
                     ${Number(livePayout.pot).toFixed(2)} pot
@@ -2245,6 +2253,8 @@ function PokerPanel({ round, year, isLive, roundId }) {
                     {Number(livePayout.three_putt_pot).toFixed(2)} three-putt penalties ({livePayout.total_three_putts})
                   </div>
                 </div>
+              ) : !isAdmin ? (
+                <div style={{ fontSize: 12, color: "#8A8371", textAlign: "center", padding: "8px 0" }}>Winner not recorded yet — an admin will enter it after the round.</div>
               ) : (
                 <>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#6B6455", marginBottom: 8 }}>
@@ -2444,7 +2454,11 @@ function SkinsPanel({ round, year, isLive, roundId }) {
   );
 }
 
-function CtpPanel({ round, year, isLive, roundId, currentEventId, course }) {
+function CtpPanel({ round, year, isLive, roundId, currentEventId, course, myPlayer }) {
+  // UX-level only, same as elsewhere — ctp_results is admin-only write at
+  // the RLS level; this just avoids a non-admin hitting a confusing
+  // generic error for a control they were never going to be allowed to use.
+  const isAdmin = myPlayer?.role === "admin";
   const [winners, setWinners] = useState({}); // live: { holeNumber: playerId } scoped to roundId. offline: { "year-round-hole": playerId }
   const [draft, setDraft] = useState({}); // { hole: playerId } — pending edits before Save all
   const [saved, setSaved] = useState(false);
@@ -2590,6 +2604,7 @@ function CtpPanel({ round, year, isLive, roundId, currentEventId, course }) {
                 <select
                   value={winnerFor(h.number)}
                   onChange={(e) => setDraftFor(h.number, e.target.value)}
+                  disabled={!isAdmin}
                   style={{
                     width: "100%",
                     boxSizing: "border-box",
@@ -2598,8 +2613,8 @@ function CtpPanel({ round, year, isLive, roundId, currentEventId, course }) {
                     padding: "8px 10px",
                     fontSize: 13,
                     fontFamily: "'Inter', sans-serif",
-                    background: "#FFFFFF",
-                    color: "#2C2A22",
+                    background: isAdmin ? "#FFFFFF" : "#F3EFE2",
+                    color: isAdmin ? "#2C2A22" : "#8A8371",
                   }}
                 >
                   <option value="">No winner</option>
@@ -2624,25 +2639,31 @@ function CtpPanel({ round, year, isLive, roundId, currentEventId, course }) {
             </div>
           )}
 
-          <button
-            onClick={handleSaveAll}
-            disabled={!hasPendingChanges}
-            style={{
-              width: "100%",
-              marginTop: 12,
-              border: "none",
-              borderRadius: 10,
-              padding: "12px",
-              fontSize: 14,
-              fontWeight: 600,
-              fontFamily: "'Inter', sans-serif",
-              background: hasPendingChanges ? "#1B4332" : "#DCD6C4",
-              color: "#F3EFE2",
-              cursor: hasPendingChanges ? "pointer" : "default",
-            }}
-          >
-            Save all
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={handleSaveAll}
+              disabled={!hasPendingChanges}
+              style={{
+                width: "100%",
+                marginTop: 12,
+                border: "none",
+                borderRadius: 10,
+                padding: "12px",
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: "'Inter', sans-serif",
+                background: hasPendingChanges ? "#1B4332" : "#DCD6C4",
+                color: "#F3EFE2",
+                cursor: hasPendingChanges ? "pointer" : "default",
+              }}
+            >
+              Save all
+            </button>
+          ) : (
+            <div style={{ fontSize: 11.5, color: "#B4AE9E", textAlign: "center", marginTop: 12, padding: "8px 0" }}>
+              Only an admin can record or change CTP winners.
+            </div>
+          )}
         </>
       )}
     </div>
