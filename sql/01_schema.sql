@@ -338,3 +338,47 @@ create policy "send_own" on messages for insert
 
 create policy "delete_own_or_admin" on messages for delete
   using (player_id = my_player_id() or is_admin_user());
+
+-- Record Book cache — per player, per year. See sql/41_record_book_cache.sql
+-- for why (all-time rollups over the live views became a timeout risk;
+-- cached per-year rather than as one all-time blob, since a completed
+-- year's contribution never changes and this way recalculating one newly
+-- finished year doesn't require re-deriving the whole club history).
+create table if not exists solo_year_stats (
+  id                  serial primary key,
+  event_id            integer not null references events (id) on delete cascade,
+  player_id           integer not null references players (id) on delete cascade,
+  year_rank           integer,
+  rounds_played       integer not null default 0,
+  gross_strokes_sum   numeric not null default 0,
+  gross_to_par_sum    numeric not null default 0,
+  net_strokes_sum     numeric not null default 0,
+  net_to_par_sum      numeric not null default 0,
+  calculated_at       timestamptz not null default now(),
+  unique (event_id, player_id)
+);
+
+create table if not exists team_year_stats (
+  id             serial primary key,
+  event_id       integer not null references events (id) on delete cascade,
+  player_id      integer not null references players (id) on delete cascade,
+  year_rank      integer,
+  pts_low        numeric,
+  pts_sum        numeric not null default 0,
+  pts_count      integer not null default 0,
+  pts_high       numeric,
+  win            integer not null default 0,
+  loss           integer not null default 0,
+  tie            integer not null default 0,
+  calculated_at  timestamptz not null default now(),
+  unique (event_id, player_id)
+);
+
+alter table solo_year_stats enable row level security;
+alter table team_year_stats enable row level security;
+
+create policy "read_authenticated" on solo_year_stats for select using (auth.role() = 'authenticated');
+create policy "admin_write" on solo_year_stats for all using (is_admin_user()) with check (is_admin_user());
+
+create policy "read_authenticated" on team_year_stats for select using (auth.role() = 'authenticated');
+create policy "admin_write" on team_year_stats for all using (is_admin_user()) with check (is_admin_user());

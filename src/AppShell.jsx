@@ -6,6 +6,8 @@ import {
   fetchSoloRoundTotals,
   fetchSoloRoundGrossTotals,
   fetchSoloRecordBook,
+  recalculateYearStats,
+  fetchYearStatsTimestamp,
   fetchSoloYearRanks,
   fetchAllSoloRoundTotals,
   fetchTeamRecordBook,
@@ -1902,8 +1904,21 @@ function MessagesScreen({ isLive, myPlayer }) {
       return;
     }
     load();
-    const interval = setInterval(load, 8000);
-    return () => clearInterval(interval);
+    // Refetch when the tab/window regains focus, instead of polling on a
+    // timer — event-driven, so someone leaving this screen open in the
+    // background generates zero ongoing load, rather than a query every
+    // few seconds indefinitely. A stale chat for a few minutes while
+    // someone's looking at another app is a fine tradeoff for not
+    // hammering the database around the clock.
+    const onFocus = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLive]);
 
@@ -1971,10 +1986,17 @@ function MessagesScreen({ isLive, myPlayer }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ padding: "14px 20px 10px", borderBottom: "1px solid #E4DFCE" }}>
+      <div style={{ padding: "14px 20px 10px", borderBottom: "1px solid #E4DFCE", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
           Messages
         </div>
+        <button
+          onClick={load}
+          aria-label="Refresh messages"
+          style={{ border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#6B6455", borderRadius: 8, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+        >
+          Refresh
+        </button>
       </div>
 
       {error && (
@@ -2913,7 +2935,7 @@ function More({ currentYear, setCurrentYear, isLive, currentEventId, refreshRoun
   const isAdmin = !isLive || myPlayer?.role === "admin";
 
   if (view === "recordbook") {
-    return <RecordBook onBack={() => setView("menu")} isLive={isLive} />;
+    return <RecordBook onBack={() => setView("menu")} isLive={isLive} myPlayer={myPlayer} />;
   }
   if (view === "players") {
     return <PlayersScreen onBack={() => setView("menu")} isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />;
@@ -3328,6 +3350,39 @@ function RolesSettings({ onBack, isLive }) {
   );
 }
 
+function RecalcRow({ label, timestamp, status, onClick }) {
+  const running = status === "running";
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      <div>
+        <div style={{ fontSize: 12, color: "#2C2A22" }}>{label}</div>
+        <div style={{ fontSize: 10, color: status === "error" ? "#A3492E" : "#8A8371" }}>
+          {status === "error" ? "Couldn't recalculate — try again." : timestamp ? formatCalculatedAt(timestamp) : "Never calculated"}
+        </div>
+      </div>
+      <button
+        onClick={onClick}
+        disabled={running}
+        style={{
+          border: "1px solid #DCD6C4",
+          background: running ? "#F3EFE2" : "#FFFFFF",
+          color: "#1B4332",
+          borderRadius: 8,
+          padding: "6px 12px",
+          fontSize: 11.5,
+          fontWeight: 600,
+          cursor: running ? "default" : "pointer",
+          fontFamily: "'Inter', sans-serif",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+        }}
+      >
+        {running ? "Recalculating…" : "Recalculate"}
+      </button>
+    </div>
+  );
+}
+
 function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
   const [years, setYears] = useState(() => RECORD_YEARS.map((y) => ({ id: null, year: y, roundsPlayed: LEADERBOARD_ROUNDS.length, isCurrent: y === currentYear })));
   const [liveLoading, setLiveLoading] = useState(isLive);
@@ -3335,6 +3390,9 @@ function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
   const [showAddYear, setShowAddYear] = useState(false);
   const [newYearInput, setNewYearInput] = useState(String(Math.max(...RECORD_YEARS) + 1));
   const [addYearError, setAddYearError] = useState(false);
+  // "year-results" | "year-earnings" -> "running" | "error", tracked per row
+  // so recalculating one year's data doesn't disable another year's button.
+  const [recalcStatus, setRecalcStatus] = useState({});
 
   const load = async () => {
     if (!isLive) {
@@ -3343,7 +3401,13 @@ function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
     }
     try {
       const events = await fetchEvents();
-      setYears(events.map((e) => ({ id: e.id, year: e.year, roundsPlayed: e.rounds_played, isCurrent: e.is_current })));
+      const withTimestamps = await Promise.all(
+        events.map(async (e) => {
+          const [resultsTs, earningsTs] = await Promise.all([fetchYearStatsTimestamp(e.id), fetchPayoutSnapshotTimestamp(e.id)]);
+          return { id: e.id, year: e.year, roundsPlayed: e.rounds_played, isCurrent: e.is_current, resultsTimestamp: resultsTs, earningsTimestamp: earningsTs };
+        })
+      );
+      setYears(withTimestamps);
     } catch (err) {
       console.error("Failed to load events:", err);
       setLiveError(err.message || String(err));
@@ -3374,6 +3438,36 @@ function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
       } catch (err) {
         console.error("Failed to set current year:", err);
       }
+    }
+  };
+
+  const handleRecalculateResults = async (row) => {
+    if (!row.id) return;
+    const key = `${row.year}-results`;
+    setRecalcStatus((prev) => ({ ...prev, [key]: "running" }));
+    try {
+      await recalculateYearStats(row.id);
+      const ts = await fetchYearStatsTimestamp(row.id);
+      setYears((prev) => prev.map((y) => (y.year === row.year ? { ...y, resultsTimestamp: ts } : y)));
+      setRecalcStatus((prev) => ({ ...prev, [key]: null }));
+    } catch (err) {
+      console.error("Failed to recalculate results:", err);
+      setRecalcStatus((prev) => ({ ...prev, [key]: "error" }));
+    }
+  };
+
+  const handleRecalculateEarnings = async (row) => {
+    if (!row.id) return;
+    const key = `${row.year}-earnings`;
+    setRecalcStatus((prev) => ({ ...prev, [key]: "running" }));
+    try {
+      await recalculatePayoutSnapshot(row.id);
+      const ts = await fetchPayoutSnapshotTimestamp(row.id);
+      setYears((prev) => prev.map((y) => (y.year === row.year ? { ...y, earningsTimestamp: ts } : y)));
+      setRecalcStatus((prev) => ({ ...prev, [key]: null }));
+    } catch (err) {
+      console.error("Failed to recalculate earnings:", err);
+      setRecalcStatus((prev) => ({ ...prev, [key]: "error" }));
     }
   };
 
@@ -3472,6 +3566,22 @@ function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
                   >
                     Set current
                   </button>
+                )}
+                {isLive && row.id && (
+                  <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 6, marginTop: 4, paddingTop: 10, borderTop: "1px solid #F0ECDF" }}>
+                    <RecalcRow
+                      label="Results (Solo, Team)"
+                      timestamp={row.resultsTimestamp}
+                      status={recalcStatus[`${row.year}-results`]}
+                      onClick={() => handleRecalculateResults(row)}
+                    />
+                    <RecalcRow
+                      label="Earnings"
+                      timestamp={row.earningsTimestamp}
+                      status={recalcStatus[`${row.year}-earnings`]}
+                      onClick={() => handleRecalculateEarnings(row)}
+                    />
+                  </div>
                 )}
               </div>
             ))}
@@ -4674,6 +4784,21 @@ function formatCalculatedAt(iso) {
 // payout_snapshots cache, and a single Recalculate refreshes both at once
 // (they're derived together server-side, so there's no meaningful way to
 // refresh just one half without risking them drifting apart).
+// Read-only — actually recalculating happens on Admin → Year Settings now,
+// not scattered across every screen that displays cached data. This just
+// shows whether what's on screen might be stale.
+function LastCalculatedNote({ lastCalculatedAt }) {
+  return (
+    <div style={{ background: "#FFFFFF", border: "1px solid #E4DFCE", borderRadius: 10, padding: 12, marginBottom: 14, fontSize: 11.5, color: "#8A8371" }}>
+      {lastCalculatedAt ? (
+        <>Last calculated {formatCalculatedAt(lastCalculatedAt)}. Recalculate on Admin → Year Settings.</>
+      ) : (
+        <>Never calculated for this year — recalculate on Admin → Year Settings.</>
+      )}
+    </div>
+  );
+}
+
 function RecalculateControl({ isLive, eventId, lastCalculatedAt, recalculating, onRecalculate }) {
   return (
     <div
@@ -4729,8 +4854,6 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [payouts, setPayouts] = useState([]);
   const [lastCalculatedAt, setLastCalculatedAt] = useState(null);
-  const [recalculating, setRecalculating] = useState(false);
-  const [recalcError, setRecalcError] = useState(null);
   const [liveLoading, setLiveLoading] = useState(isLive);
   const [liveError, setLiveError] = useState(null);
 
@@ -4765,7 +4888,6 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
     let cancelled = false;
     setLiveLoading(true);
     setLiveError(null);
-    setRecalcError(null);
     (async () => {
       try {
         const event = await fetchEventByYear(selectedYear);
@@ -4789,21 +4911,6 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
       cancelled = true;
     };
   }, [isLive, selectedYear]);
-
-  const handleRecalculate = async () => {
-    if (!selectedEventId) return;
-    setRecalculating(true);
-    setRecalcError(null);
-    try {
-      await recalculatePayoutSnapshot(selectedEventId);
-      await loadSnapshot(selectedEventId);
-    } catch (err) {
-      console.error("Failed to recalculate payouts:", err);
-      setRecalcError(err.message || String(err));
-    } finally {
-      setRecalculating(false);
-    }
-  };
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
@@ -4842,12 +4949,7 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
 
       {!liveLoading && (
         <>
-          <RecalculateControl isLive={isLive} eventId={selectedEventId} lastCalculatedAt={lastCalculatedAt} recalculating={recalculating} onRecalculate={handleRecalculate} />
-          {recalcError && (
-            <div style={{ marginBottom: 14 }}>
-              <Banner tone="error">Couldn't recalculate ({recalcError}).</Banner>
-            </div>
-          )}
+          <LastCalculatedNote lastCalculatedAt={lastCalculatedAt} />
 
           <SettingsSection title={`Player payouts — ${selectedYear}`}>
           {!isLive ? (
@@ -5183,8 +5285,6 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
   const [teamsForYear, setTeamsForYear] = useState([]);
   const [payouts, setPayouts] = useState([]);
   const [lastCalculatedAt, setLastCalculatedAt] = useState(null);
-  const [recalculating, setRecalculating] = useState(false);
-  const [recalcError, setRecalcError] = useState(null);
   const [soloTiebreaks, setSoloTiebreaks] = useState([]);
   const [teamTiebreaks, setTeamTiebreaks] = useState([]);
   const [liveLoading, setLiveLoading] = useState(isLive);
@@ -5221,7 +5321,6 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
     let cancelled = false;
     setLiveLoading(true);
     setLiveError(null);
-    setRecalcError(null);
     (async () => {
       try {
         const event = await fetchEventByYear(selectedYear);
@@ -5256,21 +5355,6 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
       cancelled = true;
     };
   }, [isLive, selectedYear]);
-
-  const handleRecalculate = async () => {
-    if (!selectedEventId) return;
-    setRecalculating(true);
-    setRecalcError(null);
-    try {
-      await recalculatePayoutSnapshot(selectedEventId);
-      await loadPayoutSnapshot(selectedEventId);
-    } catch (err) {
-      console.error("Failed to recalculate payouts:", err);
-      setRecalcError(err.message || String(err));
-    } finally {
-      setRecalculating(false);
-    }
-  };
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
@@ -5355,12 +5439,7 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
             )}
           </SettingsSection>
 
-          <RecalculateControl isLive={isLive} eventId={selectedEventId} lastCalculatedAt={lastCalculatedAt} recalculating={recalculating} onRecalculate={handleRecalculate} />
-          {recalcError && (
-            <div style={{ marginBottom: 14 }}>
-              <Banner tone="error">Couldn't recalculate ({recalcError}).</Banner>
-            </div>
-          )}
+          <LastCalculatedNote lastCalculatedAt={lastCalculatedAt} />
 
           <SettingsSection
             title={`Competition payouts — ${selectedYear}`}
@@ -7452,7 +7531,7 @@ function ExportResults({ onBack, isLive, currentEventId }) {
     </div>
   );
 }
-function RecordBook({ onBack, isLive }) {
+function RecordBook({ onBack, isLive, myPlayer }) {
   const [mode, setMode] = useState("solo");
   const [year, setYear] = useState("all");
   const [expanded, setExpanded] = useState(null);

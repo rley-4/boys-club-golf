@@ -61,14 +61,82 @@ export async function fetchSoloRoundGrossTotals(eventId, playerId) {
 // All-time: appearances, best/worst finish, podium count, gross/net
 // averages (strokes and to-par) — one row per player who has ever appeared
 // in a Solo standings year.
+//
+// Reads from the cache (v_solo_record_book_cached), not the live view —
+// the live all-time rollup became a real timeout risk once club history
+// grew (see sql/41_record_book_cache.sql). Recalculate populates the
+// cache one year at a time; this just reads whatever's already there.
 export async function fetchSoloRecordBook() {
   const db = requireClient();
   const { data, error } = await db
-    .from("v_solo_record_book")
+    .from("v_solo_record_book_cached")
     .select("player_id, name, appearances, best_finish, worst_finish, podium_count, gross_avg_strokes, gross_avg_to_par, net_avg_strokes, net_avg_to_par")
     .order("best_finish");
   if (error) throw error;
   return data || [];
+}
+
+// Recomputes solo_year_stats and team_year_stats for one year from the
+// live views and overwrites the cached rows for that year. This is the
+// only place that ever touches the expensive live all-time-shaped
+// queries — everything else reads the cache this leaves behind.
+export async function recalculateYearStats(eventId) {
+  const db = requireClient();
+  const [soloRows, teamRows] = await Promise.all([
+    db.from("v_solo_year_stats_live").select("*").eq("event_id", eventId),
+    db.from("v_team_year_stats_live").select("*").eq("event_id", eventId),
+  ]);
+  if (soloRows.error) throw soloRows.error;
+  if (teamRows.error) throw teamRows.error;
+
+  const calculatedAt = new Date().toISOString();
+  const soloInsert = (soloRows.data || []).map((r) => ({ ...r, calculated_at: calculatedAt }));
+  const teamInsert = (teamRows.data || []).map((r) => ({ ...r, calculated_at: calculatedAt }));
+
+  const { error: soloDeleteErr } = await db.from("solo_year_stats").delete().eq("event_id", eventId);
+  if (soloDeleteErr) throw soloDeleteErr;
+  if (soloInsert.length > 0) {
+    const { error: soloInsertErr } = await db.from("solo_year_stats").insert(soloInsert);
+    if (soloInsertErr) throw soloInsertErr;
+  }
+
+  const { error: teamDeleteErr } = await db.from("team_year_stats").delete().eq("event_id", eventId);
+  if (teamDeleteErr) throw teamDeleteErr;
+  if (teamInsert.length > 0) {
+    const { error: teamInsertErr } = await db.from("team_year_stats").insert(teamInsert);
+    if (teamInsertErr) throw teamInsertErr;
+  }
+
+  return { calculatedAt, soloCount: soloInsert.length, teamCount: teamInsert.length };
+}
+
+// When a year's Record Book cache was last recalculated — checks both
+// tables and returns the more recent (they're always written together by
+// recalculateYearStats, but this doesn't assume that never changes).
+export async function fetchYearStatsTimestamp(eventId) {
+  const db = requireClient();
+  const [solo, team] = await Promise.all([
+    db.from("solo_year_stats").select("calculated_at").eq("event_id", eventId).order("calculated_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("team_year_stats").select("calculated_at").eq("event_id", eventId).order("calculated_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (solo.error) throw solo.error;
+  if (team.error) throw team.error;
+  const times = [solo.data?.calculated_at, team.data?.calculated_at].filter(Boolean);
+  if (times.length === 0) return null;
+  return times.sort().reverse()[0];
+}
+
+// Every year currently cached — for a "which years still need
+// recalculating" view.
+export async function fetchCachedYears() {
+  const db = requireClient();
+  const { data, error } = await db.from("solo_year_stats").select("event_id, calculated_at");
+  if (error) throw error;
+  const byEvent = {};
+  (data || []).forEach((r) => {
+    if (!byEvent[r.event_id] || r.calculated_at > byEvent[r.event_id]) byEvent[r.event_id] = r.calculated_at;
+  });
+  return byEvent; // { [event_id]: latest calculated_at }
 }
 
 // Every player's rank, every year — used for the year filter (best/worst
@@ -118,10 +186,12 @@ export async function fetchAllSoloRoundTotals() {
 // 9-hole-doubling applied server-side (v_team_match_points).
 // -----------------------------------------------------------------------------
 
+// Reads from the cache (v_team_record_book_cached) — see the solo version
+// above for why.
 export async function fetchTeamRecordBook() {
   const db = requireClient();
   const { data, error } = await db
-    .from("v_team_record_book")
+    .from("v_team_record_book_cached")
     .select("player_id, name, appearances, best_finish, worst_finish, podium_count, pts_low, pts_avg, pts_high, win, loss, tie, win_pct")
     .order("best_finish");
   if (error) throw error;
