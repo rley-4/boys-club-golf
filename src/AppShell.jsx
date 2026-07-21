@@ -640,15 +640,16 @@ const SHARED_STYLES = `
     border-radius: 0;
     overflow: hidden;
   }
-  /* Bottom padding here is what keeps the fixed MUI bottom nav (56px tall,
+  /* Bottom padding here is what keeps the fixed MUI bottom nav (64px tall,
      plus any iOS home-indicator inset) from covering the last bit of
      content on every screen — every screen's content scrolls inside this
      div, so one padding rule here covers all of them. */
-  .bco-shell-content { flex: 1; overflow-y: auto; padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
-  .bco-sidebar { display: none; }
+  .bco-shell-content { flex: 1; overflow-y: auto; padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .bco-sticky-header { position: sticky; top: 0; z-index: 10; background: #FBF8F1; }
   .bco-content-inner { max-width: none; margin: 0; height: 100%; }
   .bco-bottombar-mui { display: block; }
   .bco-score-header, .bco-score-footer { border-radius: 0; }
+  .bco-sidebar { display: none; }
 
   @media (min-width: 768px) {
     .bco-shell {
@@ -836,7 +837,7 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
           className="bco-bottombar-mui"
           sx={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         >
-          <BottomNavigation showLabels value={activeTab} onChange={(event, newValue) => setActiveTab(newValue)} sx={{ bgcolor: "#F3EFE2", height: 56 }}>
+          <BottomNavigation showLabels value={activeTab} onChange={(event, newValue) => setActiveTab(newValue)} sx={{ bgcolor: "#F3EFE2", height: 64 }}>
             {TABS.map((t) => {
               const Icon = t.icon;
               const active = activeTab === t.key;
@@ -1259,7 +1260,7 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
           <Banner tone="error">Couldn't load live data from Supabase ({loadError}) — showing local demo data instead.</Banner>
         </div>
       )}
-      <div className="bco-score-header" style={{ background: "#1B4332", color: "#F3EFE2", padding: "14px 16px" }}>
+      <div className="bco-score-header bco-sticky-header" style={{ background: "#1B4332", color: "#F3EFE2", padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <select
             className="bco-mono"
@@ -1814,7 +1815,7 @@ function GamesTab({ currentYear, isLive, currentEventId, myPlayer }) {
 
   return (
     <div>
-      <div style={{ padding: "18px 20px 0" }}>
+      <div className="bco-sticky-header" style={{ padding: "18px 20px 0" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
           <div className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332" }}>
             Games
@@ -7791,6 +7792,7 @@ function RecordBook({ onBack, isLive, myPlayer }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
+      <div className="bco-sticky-header" style={{ paddingBottom: 4 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
         <button
           onClick={onBack}
@@ -7839,6 +7841,7 @@ function RecordBook({ onBack, isLive, myPlayer }) {
         {yearOptions.map((y) => (
           <YearPill key={y} label={String(y)} active={year === y} onClick={() => setYear(y)} />
         ))}
+      </div>
       </div>
 
       {mode === "solo" && isLive && liveError && (
@@ -8279,20 +8282,22 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
 
   return (
     <div style={{ padding: "18px 20px 24px" }}>
-      <div className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332", marginBottom: 12 }}>
-        Match Results
-      </div>
+      <div className="bco-sticky-header" style={{ paddingBottom: 10, marginBottom: 4 }}>
+        <div className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332", marginBottom: 12 }}>
+          Match Results
+        </div>
 
-      <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
+        <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
 
-      <RoundPicker
-        rounds={isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS}
-        selectedRound={round}
-        setSelectedRound={setRound}
-      />
+        <RoundPicker
+          rounds={isLive && yr.rounds.length > 0 ? yr.rounds.map((r) => r.label) : SCORE_ROUNDS}
+          selectedRound={round}
+          setSelectedRound={setRound}
+        />
 
-      <div style={{ fontSize: 10.5, color: "#A39C89", marginBottom: 14 }}>
-        {yr.selectedYear} · {course.name} · course handicaps shown are for {round} · sorted by progress
+        <div style={{ fontSize: 10.5, color: "#A39C89" }}>
+          {yr.selectedYear} · {course.name} · course handicaps shown are for {round} · sorted by progress
+        </div>
       </div>
 
       {matches.length === 0 ? (
@@ -8596,24 +8601,26 @@ function Leaderboard({ isLive, currentEventId, currentYear }) {
 
   return (
     <div style={{ padding: "18px 20px 24px" }}>
-      <div style={{ marginBottom: 14 }}>
-        <span className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332" }}>
-          Leaderboard
-        </span>
-      </div>
+      <div className="bco-sticky-header" style={{ paddingBottom: 4 }}>
+        <div style={{ marginBottom: 14 }}>
+          <span className="bco-display" style={{ fontSize: 20, fontWeight: 600, color: "#1B4332" }}>
+            Leaderboard
+          </span>
+        </div>
 
-      <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
+        <YearRoundPicker years={yr.years} selectedYear={yr.selectedYear} setSelectedYear={yr.setSelectedYear} />
 
-      <div className="bco-seg" style={{ marginBottom: 12 }}>
-        <button className={`bco-seg-btn${mode === "solo" ? " active" : ""}`} onClick={() => setMode("solo")}>
-          Solo
-        </button>
-        <button className={`bco-seg-btn${mode === "team" ? " active" : ""}`} onClick={() => setMode("team")}>
-          Team
-        </button>
-        <button className={`bco-seg-btn${mode === "carroll" ? " active" : ""}`} onClick={() => setMode("carroll")}>
-          Carroll Cup
-        </button>
+        <div className="bco-seg" style={{ marginBottom: 12 }}>
+          <button className={`bco-seg-btn${mode === "solo" ? " active" : ""}`} onClick={() => setMode("solo")}>
+            Solo
+          </button>
+          <button className={`bco-seg-btn${mode === "team" ? " active" : ""}`} onClick={() => setMode("team")}>
+            Team
+          </button>
+          <button className={`bco-seg-btn${mode === "carroll" ? " active" : ""}`} onClick={() => setMode("carroll")}>
+            Carroll Cup
+          </button>
+        </div>
       </div>
 
       {mode === "solo" && (
