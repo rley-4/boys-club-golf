@@ -83,8 +83,11 @@ import { FormInput } from "./components/FormInput.jsx";
 import { Banner } from "./components/Banner.jsx";
 import { FormField } from "./components/FormField.jsx";
 import { AutoComputedNote } from "./components/AutoComputedNote.jsx";
+import { SettingsSection } from "./components/SettingsSection.jsx";
+import { RemoveButton, AddRowButton } from "./components/RowButtons.jsx";
+import { RecalcRow, LastCalculatedNote, RecalculateControl } from "./components/RecalculateControl.jsx";
 import { Button } from "./components/Button.jsx";
-import { scoreLabel, scoreTone, fmtDiff, fmtStat, diffTone, ordinal } from "./lib/format.js";
+import { scoreLabel, scoreTone, fmtDiff, fmtStat, diffTone, ordinal, formatCalculatedAt } from "./lib/format.js";
 import { useYearRoundData } from "./hooks/useYearRoundData.js";
 import { teamRecordsSorted, soloRecordsSorted, seededRand, attendedYears, yearlySoloStat, yearlyTeamStat } from "./lib/yearlyStats.js";
 import { MessagesScreen } from "./screens/Messages.jsx";
@@ -1677,16 +1680,6 @@ function AdminResultsMenu({ onBack, onNavigate }) {
 
 
 
-function SettingsSection({ title, description, children }) {
-  return (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "#1B4332", marginBottom: 4 }}>{title}</div>
-      {description && <div style={{ fontSize: 11, color: "#8A8371", marginBottom: 10, lineHeight: 1.5 }}>{description}</div>}
-      {children}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Event settings — current year, team pairs, Carroll Cup roster, round
 // matchups, and round-to-course assignment. Local to this session for now,
@@ -1821,39 +1814,6 @@ function RolesSettings({ onBack, isLive }) {
           )}
         </SettingsSection>
       )}
-    </div>
-  );
-}
-
-function RecalcRow({ label, timestamp, status, onClick }) {
-  const running = status === "running";
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-      <div>
-        <div style={{ fontSize: 12, color: "#2C2A22" }}>{label}</div>
-        <div style={{ fontSize: 10, color: status === "error" ? "#A3492E" : "#8A8371" }}>
-          {status === "error" ? "Couldn't recalculate — try again." : timestamp ? formatCalculatedAt(timestamp) : "Never calculated"}
-        </div>
-      </div>
-      <button
-        onClick={onClick}
-        disabled={running}
-        style={{
-          border: "1px solid #DCD6C4",
-          background: running ? "#F3EFE2" : "#FFFFFF",
-          color: "#1B4332",
-          borderRadius: 8,
-          padding: "6px 12px",
-          fontSize: 11.5,
-          fontWeight: 600,
-          cursor: running ? "default" : "pointer",
-          fontFamily: "'Inter', sans-serif",
-          whiteSpace: "nowrap",
-          flexShrink: 0,
-        }}
-      >
-        {running ? "Recalculating…" : "Recalculate"}
-      </button>
     </div>
   );
 }
@@ -2942,52 +2902,6 @@ function MatchupSetupSettings({ onBack, isLive, currentYear }) {
   );
 }
 
-function RemoveButton({ onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label="Remove"
-      style={{
-        position: "absolute",
-        top: 8,
-        right: 8,
-        border: "none",
-        background: "none",
-        color: "#B4AE9E",
-        cursor: "pointer",
-        fontSize: 16,
-        lineHeight: 1,
-        padding: 4,
-      }}
-    >
-      ×
-    </button>
-  );
-}
-
-function AddRowButton({ label, onClick, disabled = false }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        border: "1px dashed #C9C2AC",
-        background: "#FFFFFF",
-        color: "#1B4332",
-        borderRadius: 10,
-        padding: "9px 0",
-        fontSize: 12.5,
-        fontWeight: 600,
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.6 : 1,
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Game settings — buy-ins and pots for the daily cash games.
 // ---------------------------------------------------------------------------
@@ -3214,80 +3128,6 @@ function GamesSetupSettings({ onBack, isLive, currentYear }) {
 // Games results — the expensive part (payout aggregation across all four
 // games). Kept on its own screen so Setup never has to wait on it.
 // ---------------------------------------------------------------------------
-function formatCalculatedAt(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-// Shared by Games Results and Competition Results — both read from the same
-// payout_snapshots cache, and a single Recalculate refreshes both at once
-// (they're derived together server-side, so there's no meaningful way to
-// refresh just one half without risking them drifting apart).
-// Read-only — actually recalculating happens on Admin → Year Settings now,
-// not scattered across every screen that displays cached data. This just
-// shows whether what's on screen might be stale.
-function LastCalculatedNote({ lastCalculatedAt }) {
-  return (
-    <div style={{ background: "#FFFFFF", border: "1px solid #E4DFCE", borderRadius: 10, padding: 12, marginBottom: 14, fontSize: 11.5, color: "#8A8371" }}>
-      {lastCalculatedAt ? (
-        <>Last calculated {formatCalculatedAt(lastCalculatedAt)}. Recalculate on Admin → Year Settings.</>
-      ) : (
-        <>Never calculated for this year — recalculate on Admin → Year Settings.</>
-      )}
-    </div>
-  );
-}
-
-function RecalculateControl({ isLive, eventId, lastCalculatedAt, recalculating, onRecalculate }) {
-  return (
-    <div
-      style={{
-        background: "#FFFFFF",
-        border: "1px solid #E4DFCE",
-        borderRadius: 10,
-        padding: 12,
-        marginBottom: 14,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 10,
-      }}
-    >
-      <div style={{ fontSize: 11.5, color: "#8A8371", lineHeight: 1.4 }}>
-        {lastCalculatedAt ? (
-          <>
-            Last calculated
-            <br />
-            {formatCalculatedAt(lastCalculatedAt)}
-          </>
-        ) : (
-          "Never calculated for this year"
-        )}
-      </div>
-      <button
-        onClick={onRecalculate}
-        disabled={!isLive || !eventId || recalculating}
-        style={{
-          border: "none",
-          background: "#1B4332",
-          color: "#F3EFE2",
-          borderRadius: 8,
-          padding: "9px 16px",
-          fontSize: 12.5,
-          fontWeight: 600,
-          cursor: !isLive || !eventId || recalculating ? "default" : "pointer",
-          opacity: !isLive || !eventId || recalculating ? 0.6 : 1,
-          fontFamily: "'Inter', sans-serif",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {recalculating ? "Recalculating…" : "Recalculate"}
-      </button>
-    </div>
-  );
-}
-
 function GamesResultsSettings({ onBack, isLive, currentYear }) {
   const [years, setYears] = useState([currentYear]);
   const [selectedYear, setSelectedYear] = useState(currentYear);

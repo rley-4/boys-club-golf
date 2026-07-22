@@ -41,6 +41,12 @@ export function diffTone(n) {
   return { bg: "#F7DCDA", fg: "#8C2F2A" };
 }
 
+export function formatCalculatedAt(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
 export function ordinal(n) {
   if (n == null) return "";
   const rem100 = n % 100;
