@@ -1,7 +1,18 @@
-import { TEAM_RECORDS, SOLO_RECORDS, RECORD_YEARS } from "../data/dummyData.js";
+import { TEAM_RECORDS, SOLO_RECORDS, RECORD_YEARS, SOLO_STANDINGS, TEAM_STANDINGS } from "../data/dummyData.js";
 
 export const teamRecordsSorted = [...TEAM_RECORDS].sort((a, b) => a.posAvg - b.posAvg);
 export const soloRecordsSorted = [...SOLO_RECORDS].sort((a, b) => a.posAvg - b.posAvg);
+
+// Mock Solo/Team current-year standings — used as the offline fallback by
+// both Leaderboard and Export when there's no live Supabase connection.
+export const soloResults = SOLO_STANDINGS.map((p) => {
+  const worst = Math.max(...p.rounds);
+  const droppedIndex = p.rounds.indexOf(worst);
+  const total = p.rounds.reduce((sum, v, i) => (i === droppedIndex ? sum : sum + v), 0);
+  return { ...p, droppedIndex, total };
+}).sort((a, b) => a.total - b.total);
+
+export const teamResults = [...TEAM_STANDINGS].sort((a, b) => b.points - a.points);
 
 // ---------------------------------------------------------------------------
 // Year drill-down. Real data will eventually have one row per player per
