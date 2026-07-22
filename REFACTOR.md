@@ -127,6 +127,11 @@ panel should load ~220 lines, not 9,960. The file already has clean internal
 seams (each tab/screen is its own component); this is mostly *moving* them.
 Promoted ahead of P1 — see the reorder note above.
 
+**Status: done.** `AppShell.jsx` is now 334 lines — `ThemeProvider`, the
+`TABS` config, `SHARED_STYLES`, and the `activeTab` switch that renders each
+screen. Every screen/admin component now lives in its own file under
+`src/screens/`, `src/admin/`, `src/components/`, or `src/lib/`.
+
 ### Target structure
 
 ```
@@ -134,24 +139,27 @@ src/
   data/dummyData.js          # PLAYERS, COURSES, TEAMS, WIREFRAME_YEARS, + ROUND_* mutable maps (done)
   hooks/useYearRoundData.js  # (done)
   lib/format.js              # ordinal, fmtDiff, fmtStat, scoreLabel, scoreTone, diffTone (done)
+  lib/handicap.js            # calcCourseHandicap, strokesForHole, computeMatchPops(Live) (done)
   components/                # shared primitives from P0, + YearRoundPicker.jsx (done)
   screens/
-    ScoreEntry.jsx                 # not moved yet
+    ScoreEntry.jsx                 # done
     Messages.jsx                   # done
-    More.jsx                       # not moved yet
+    More.jsx                       # done
     Games.jsx                      # done — GamesTab, Poker/Skins/Ctp/LowNet panels
-    Leaderboard/                   # not moved yet — Leaderboard, Solo/Team/CarrollCup tables, scorecards
-    MatchResults.jsx               # not moved yet
+    MatchResults.jsx               # done — MatchResultsTab + progress/side/row helpers
+    Leaderboard/                   # done — index.jsx, SoloTable.jsx, TeamTable.jsx,
+                                    #  CarrollCupTable.jsx, MatchScorecard.jsx, tiebreak.js
   admin/
     settings/                      # done — Roles, Year, TeamSetup, RoundSetup, MatchupSetup, GamesSetup/Results, CompetitionSetup/Results
-    ImportResults.jsx  ExportResults.jsx   # not moved yet
+    ImportResults.jsx  ExportResults.jsx   # done
+    AdminMenus.jsx                         # done — AdminSetupMenu/AdminResultsMenu/AdminMenu + config
     PlayersScreen.jsx  CoursesScreen.jsx   # done
   screens/RecordBook.jsx      # done
-  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines) — currently 4219 lines
+  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing — done, 334 lines
 ```
 
 Target: ~40 files of 50–400 lines instead of one 9,960-line file. Progress:
-9960 → 9443 (seed data, external commit) → 8120 → 6472 → 4219 lines so far.
+9960 → 9443 (seed data, external commit) → 8120 → 6472 → 4219 → 334 lines. **P2 complete.**
 
 ### Tasks
 
@@ -185,14 +193,22 @@ Target: ~40 files of 50–400 lines instead of one 9,960-line file. Progress:
       several of these screens after the earlier Games extraction — same-file
       function hoisting had been masking it) and deleted a dead
       `COMPETITION_LABELS` constant.
-- [ ] Move each remaining screen/admin component to its own file, updating
-      imports — in progress. Remaining, in dependency order (leaves first):
-      `ImportResults`/`ExportResults` →
-      `AdminSetupMenu`/`AdminResultsMenu` (already data-driven, just needs
-      moving) → `More` (imports all of the above) → `ScoreEntry` →
-      `Leaderboard` + Solo/Team/CarrollCup tables/scorecards →
-      `MatchResultsTab`.
-- [ ] Reduce `AppShell.jsx` to the shell + tab routing.
+- [x] Move `ImportResults`/`ExportResults` to `src/admin/ImportResults.jsx` /
+      `src/admin/ExportResults.jsx`.
+- [x] Move `AdminSetupMenu`/`AdminResultsMenu`/`AdminMenu` +
+      `AdminIconButton`/`AdminIconRow`/`GolfClubIcon` + the
+      `ADMIN_SETUP_SECTIONS`/`ADMIN_RESULTS_SECTIONS` config to
+      `src/admin/AdminMenus.jsx`.
+- [x] Move `More` to `src/screens/More.jsx`.
+- [x] Move `ScoreEntry` (+ local `StatusBadge`/`StrokeBubble`/`HcpBubble`/
+      `TotalStat` helpers) to `src/screens/ScoreEntry.jsx`, and its
+      handicap math (`calcCourseHandicap`, `strokesForHole`,
+      `computeMatchPops`, `computeMatchPopsLive`) to `src/lib/handicap.js`.
+- [x] Move `Leaderboard` + `SoloTable`/`TeamTable`/`CarrollCupTable` +
+      scorecards/tiebreak helpers to `src/screens/Leaderboard/`.
+- [x] Move `MatchResultsTab` (+ `computeMatchProgress`/`ProgressBadge`/
+      `MatchTeamSide`/`PlayerRow`) to `src/screens/MatchResults.jsx`.
+- [x] Reduce `AppShell.jsx` to the shell + tab routing (4219 → 334 lines).
 
 ### ⚠️ Risk note
 
