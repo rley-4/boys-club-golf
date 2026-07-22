@@ -95,9 +95,16 @@ import {
   fetchCarrollCupRoster,
   upsertCarrollCupAssignment,
 } from "./lib/api.js";
-import { Flag, Trophy, Coins, MoreHorizontal, BookOpen, ChevronRight, ChevronLeft, Swords, User, Calendar, Users, Import, Upload, MessagesSquare } from "lucide-react";
+import { Flag, Trophy, Coins, MoreHorizontal, BookOpen, ChevronRight, Swords, User, Calendar, Users, Import, Upload, MessagesSquare } from "lucide-react";
 import { ThemeProvider, Paper, BottomNavigation, BottomNavigationAction } from "@mui/material";
 import theme from "./theme.js";
+import { ScreenHeader } from "./components/ScreenHeader.jsx";
+import { Pill } from "./components/Pill.jsx";
+import { StatTile } from "./components/StatTile.jsx";
+import { FormSelect } from "./components/FormSelect.jsx";
+import { FormInput } from "./components/FormInput.jsx";
+import { Banner } from "./components/Banner.jsx";
+import { Button } from "./components/Button.jsx";
 
 // ---------------------------------------------------------------------------
 // Courses. In the real app this comes from a `courses` table (name, rating,
@@ -1371,15 +1378,15 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
           {selectedTeamId && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <button className="bco-nav-btn" onClick={() => goTo(holeIndex - 1)} disabled={holeIndex === 0}>
+                <Button variant="nav" onClick={() => goTo(holeIndex - 1)} disabled={holeIndex === 0}>
                   ← Prev
-                </button>
+                </Button>
                 <span style={{ fontSize: 12, color: "#8A8371", fontWeight: 600 }}>
                   Hole {hole.number} of {course.holes.length}
                 </span>
-                <button className="bco-nav-btn" onClick={() => goTo(holeIndex + 1)} disabled={holeIndex === course.holes.length - 1}>
+                <Button variant="nav" onClick={() => goTo(holeIndex + 1)} disabled={holeIndex === course.holes.length - 1}>
                   Next →
-                </button>
+                </Button>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1416,15 +1423,15 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
       ) : (
         <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px 0" }}>
-        <button className="bco-nav-btn" onClick={() => goTo(holeIndex - 1)} disabled={holeIndex === 0}>
+        <Button variant="nav" onClick={() => goTo(holeIndex - 1)} disabled={holeIndex === 0}>
           ← Prev
-        </button>
+        </Button>
         <span style={{ fontSize: 12, color: "#8A8371", fontWeight: 600 }}>
           {selectedRound} · Hole {hole.number} of {course.holes.length}
         </span>
-        <button className="bco-nav-btn" onClick={() => goTo(holeIndex + 1)} disabled={holeIndex === course.holes.length - 1}>
+        <Button variant="nav" onClick={() => goTo(holeIndex + 1)} disabled={holeIndex === course.holes.length - 1}>
           Next →
-        </button>
+        </Button>
       </div>
 
       <div style={{ padding: "16px 20px 4px" }}>
@@ -1470,9 +1477,9 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em", textAlign: "center" }}>STROKES</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustStrokes(-1)} disabled={!canEdit} aria-label="Decrease strokes">
+              <Button variant="step" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustStrokes(-1)} disabled={!canEdit} aria-label="Decrease strokes">
                 −
-              </button>
+              </Button>
               <div style={{ minWidth: 46, textAlign: "center" }}>
                 <div className="bco-mono" style={{ fontSize: 26, fontWeight: 600, color: "#2C2A22" }}>
                   {entry.strokes ?? "–"}
@@ -1495,27 +1502,27 @@ function ScoreEntry({ scoresStore, setScoresStore, currentYear, isLive, loadErro
                   </span>
                 </div>
               </div>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustStrokes(1)} disabled={!canEdit} aria-label="Increase strokes">
+              <Button variant="step" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustStrokes(1)} disabled={!canEdit} aria-label="Increase strokes">
                 +
-              </button>
+              </Button>
             </div>
           </div>
 
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 6, letterSpacing: "0.02em", textAlign: "center" }}>PUTTS</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustPutts(-1)} disabled={!canEdit} aria-label="Decrease putts">
+              <Button variant="step" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustPutts(-1)} disabled={!canEdit} aria-label="Decrease putts">
                 −
-              </button>
+              </Button>
               <div style={{ minWidth: 46, textAlign: "center" }}>
                 <div className="bco-mono" style={{ fontSize: 26, fontWeight: 600, color: "#2C2A22" }}>
                   {entry.putts ?? "–"}
                 </div>
                 <div style={{ marginTop: 3, minHeight: 18 }} />
               </div>
-              <button className="bco-step-btn" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustPutts(1)} disabled={!canEdit} aria-label="Increase putts">
+              <Button variant="step" style={{ width: 36, height: 36, fontSize: 17, opacity: canEdit ? 1 : 0.4 }} onClick={() => adjustPutts(1)} disabled={!canEdit} aria-label="Increase putts">
                 +
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2897,31 +2904,6 @@ function LowNetPanel({ round, year, isLive, roundId, currentEventId }) {
   );
 }
 
-function LightSelect({ value, onChange, options }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={{
-        border: "1px solid #DCD6C4",
-        borderRadius: 8,
-        padding: "8px 10px",
-        fontSize: 13,
-        fontWeight: 600,
-        fontFamily: "'Inter', sans-serif",
-        background: "#FFFFFF",
-        color: "#2C2A22",
-      }}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // More tab — settings hub. Currently houses Record Book and Admin; other
 // management screens will get added here as their own menu rows.
@@ -3111,89 +3093,76 @@ function AdminIconRow({ title, children }) {
   );
 }
 
-function AdminSetupMenu({ onBack, onNavigate }) {
+// Data-driven menu config — each Admin menu is just a list of titled rows
+// of {label, icon, target} shown via `AdminIconRow`/`AdminIconButton`.
+// Adding a new admin screen means adding one row here, not new markup.
+const ADMIN_SETUP_SECTIONS = [
+  {
+    title: "General setup",
+    items: [
+      { label: "Roles", icon: User, target: "admin-roles" },
+      { label: "Years", icon: Calendar, target: "admin-general" },
+    ],
+  },
+  {
+    title: "Tournament setup",
+    items: [
+      { label: "Round setup", icon: GolfClubIcon, target: "admin-rounds" },
+      { label: "Team setup", icon: Users, target: "admin-teams" },
+      { label: "Matchup setup", icon: Swords, target: "admin-matchups" },
+    ],
+  },
+  {
+    title: "Money setup",
+    items: [
+      { label: "Competition setup", icon: Trophy, target: "admin-competitions-setup" },
+      { label: "Games setup", icon: Coins, target: "admin-games-setup" },
+    ],
+  },
+];
+
+const ADMIN_RESULTS_SECTIONS = [
+  {
+    title: "Results data",
+    items: [
+      { label: "Competition results", icon: Trophy, target: "admin-competitions-results" },
+      { label: "Games results", icon: Coins, target: "admin-games-results" },
+    ],
+  },
+  {
+    title: "Bulk data",
+    items: [
+      { label: "Import", icon: Import, target: "admin-import" },
+      { label: "Export", icon: Upload, target: "admin-export" },
+    ],
+  },
+];
+
+function AdminMenu({ title, sections, onBack, onNavigate }) {
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 18 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to More">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Admin setup
-        </span>
-      </div>
+      <ScreenHeader title={title} onBack={onBack} backLabel="Back to More" marginBottom={18} />
 
-      <AdminIconRow title="General setup">
-        <AdminIconButton label="Roles" icon={User} onClick={() => onNavigate("admin-roles")} />
-        <AdminIconButton label="Years" icon={Calendar} onClick={() => onNavigate("admin-general")} />
-      </AdminIconRow>
-
-      <AdminIconRow title="Tournament setup">
-        <AdminIconButton label="Round setup" icon={GolfClubIcon} onClick={() => onNavigate("admin-rounds")} />
-        <AdminIconButton label="Team setup" icon={Users} onClick={() => onNavigate("admin-teams")} />
-        <AdminIconButton label="Matchup setup" icon={Swords} onClick={() => onNavigate("admin-matchups")} />
-      </AdminIconRow>
-
-      <AdminIconRow title="Money setup">
-        <AdminIconButton label="Competition setup" icon={Trophy} onClick={() => onNavigate("admin-competitions-setup")} />
-        <AdminIconButton label="Games setup" icon={Coins} onClick={() => onNavigate("admin-games-setup")} />
-      </AdminIconRow>
+      {sections.map((section) => (
+        <AdminIconRow key={section.title} title={section.title}>
+          {section.items.map((item) => (
+            <AdminIconButton key={item.label} label={item.label} icon={item.icon} onClick={() => onNavigate(item.target)} />
+          ))}
+        </AdminIconRow>
+      ))}
     </div>
   );
+}
+
+function AdminSetupMenu({ onBack, onNavigate }) {
+  return <AdminMenu title="Admin setup" sections={ADMIN_SETUP_SECTIONS} onBack={onBack} onNavigate={onNavigate} />;
 }
 
 function AdminResultsMenu({ onBack, onNavigate }) {
-  return (
-    <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 18 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to More">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Admin results
-        </span>
-      </div>
-
-      <AdminIconRow title="Results data">
-        <AdminIconButton label="Competition results" icon={Trophy} onClick={() => onNavigate("admin-competitions-results")} />
-        <AdminIconButton label="Games results" icon={Coins} onClick={() => onNavigate("admin-games-results")} />
-      </AdminIconRow>
-
-      <AdminIconRow title="Bulk data">
-        <AdminIconButton label="Import" icon={Import} onClick={() => onNavigate("admin-import")} />
-        <AdminIconButton label="Export" icon={Upload} onClick={() => onNavigate("admin-export")} />
-      </AdminIconRow>
-    </div>
-  );
+  return <AdminMenu title="Admin results" sections={ADMIN_RESULTS_SECTIONS} onBack={onBack} onNavigate={onNavigate} />;
 }
 
 
-
-function FormSelect({ value, onChange, options }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={{
-        width: "100%",
-        boxSizing: "border-box",
-        border: "1px solid #DCD6C4",
-        borderRadius: 8,
-        padding: "8px 10px",
-        fontSize: 13,
-        fontFamily: "'Inter', sans-serif",
-        background: "#FFFFFF",
-        color: "#2C2A22",
-      }}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 function SettingsSection({ title, description, children }) {
   return (
@@ -3278,14 +3247,7 @@ function RolesSettings({ onBack, isLive }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Roles
-        </span>
-      </div>
+      <ScreenHeader title="Roles" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="What each role can do">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -3495,14 +3457,7 @@ function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Year settings
-        </span>
-      </div>
+      <ScreenHeader title="Year settings" onBack={onBack} backLabel="Back to Admin" />
 
       {isLive && liveError && (
         <div style={{ marginBottom: 14 }}>
@@ -3595,9 +3550,9 @@ function YearSettings({ onBack, currentYear, setCurrentYear, isLive }) {
                     <FormInput type="number" value={newYearInput} onChange={setNewYearInput} />
                   </FormField>
                 </div>
-                <button className="bco-save-btn" style={{ padding: "8px 14px", width: "auto" }} onClick={handleAddYear}>
+                <Button style={{ padding: "8px 14px", width: "auto" }} onClick={handleAddYear}>
                   Add
-                </button>
+                </Button>
                 <button
                   onClick={() => setShowAddYear(false)}
                   style={{ border: "1px solid #DCD6C4", background: "#FFFFFF", color: "#6B6455", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "'Inter', sans-serif", cursor: "pointer" }}
@@ -3806,14 +3761,7 @@ function TeamSetupSettings({ onBack, isLive, currentYear }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Team setup
-        </span>
-      </div>
+      <ScreenHeader title="Team setup" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="Year" description="Teams and Carroll Cup roster are saved per year — editing one year never touches another's history. Add new years on Admin → Year settings.">
         <FormField label="Year">
@@ -4083,14 +4031,7 @@ function RoundSetupSettings({ onBack, isLive, currentYear, refreshRoundMap }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Round setup
-        </span>
-      </div>
+      <ScreenHeader title="Round setup" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="Year" description="Which year's rounds you're configuring. Add new years on Admin → Year settings.">
         <FormField label="Year">
@@ -4396,14 +4337,7 @@ function MatchupSetupSettings({ onBack, isLive, currentYear }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Matchup setup
-        </span>
-      </div>
+      <ScreenHeader title="Matchup setup" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="Year" description="Which year's matchups you're configuring. Add new years on Admin → Year settings.">
         <FormField label="Year">
@@ -4657,14 +4591,7 @@ function GamesSetupSettings({ onBack, isLive, currentYear }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Games setup
-        </span>
-      </div>
+      <ScreenHeader title="Games setup" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="Year" description="Buy-ins and prizes are saved per year. Add new years on Admin → Year settings.">
         <FormField label="Year">
@@ -4763,9 +4690,9 @@ function GamesSetupSettings({ onBack, isLive, currentYear }) {
           <Banner tone="error">Couldn't save — try again.</Banner>
         </div>
       )}
-      <button className="bco-save-btn" onClick={handleSave} disabled={!isLive || !selectedEventId || saveStatus === "saving"}>
+      <Button onClick={handleSave} disabled={!isLive || !selectedEventId || saveStatus === "saving"}>
         {saveStatus === "saving" ? "Saving…" : "Save game settings"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -4914,14 +4841,7 @@ function GamesResultsSettings({ onBack, isLive, currentYear }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Games results
-        </span>
-      </div>
+      <ScreenHeader title="Games results" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="Year">
         <FormField label="Year">
@@ -5176,14 +5096,7 @@ function CompetitionSetupSettings({ onBack, isLive, currentYear }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Competition setup
-        </span>
-      </div>
+      <ScreenHeader title="Competition setup" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="Year" description="Buy-ins and payout places are saved per year.">
         <FormField label="Year">
@@ -5240,9 +5153,9 @@ function CompetitionSetupSettings({ onBack, isLive, currentYear }) {
                 <Banner tone="error">Couldn't save — try again.</Banner>
               </div>
             )}
-            <button className="bco-save-btn" style={{ marginTop: 10 }} onClick={handleSaveBuyIns} disabled={!isLive || !selectedEventId || saveStatus === "saving"}>
+            <Button style={{ marginTop: 10 }} onClick={handleSaveBuyIns} disabled={!isLive || !selectedEventId || saveStatus === "saving"}>
               {saveStatus === "saving" ? "Saving…" : "Save buy-ins"}
-            </button>
+            </Button>
           </SettingsSection>
 
           <SettingsSection title="Solo payouts by place" description={`${soloCount} players this year — pay out however many places you want.`}>
@@ -5358,14 +5271,7 @@ function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Competition results
-        </span>
-      </div>
+      <ScreenHeader title="Competition results" onBack={onBack} backLabel="Back to Admin" />
 
       <SettingsSection title="Year">
         <FormField label="Year">
@@ -6122,14 +6028,7 @@ function ImportResults({ onBack, isLive }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Import results
-        </span>
-      </div>
+      <ScreenHeader title="Import results" onBack={onBack} backLabel="Back to Admin" />
 
       <div className="bco-seg" style={{ marginBottom: 14 }}>
         {IMPORT_TYPES.map((t) => (
@@ -6219,9 +6118,9 @@ function ImportResults({ onBack, isLive }) {
         </div>
       )}
 
-      <button className="bco-save-btn" style={{ marginTop: 14 }} onClick={handleImport} disabled={!fileName || !isLive || status === "parsing"}>
+      <Button style={{ marginTop: 14 }} onClick={handleImport} disabled={!fileName || !isLive || status === "parsing"}>
         {status === "parsing" ? "Importing…" : "Import CSV"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -6468,30 +6367,29 @@ function PlayersScreen({ onBack, isLive, currentEventId, currentYear }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to More">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332", flex: 1 }}>
-          Players
-        </span>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          style={{
-            border: "1px solid #1B4332",
-            color: "#1B4332",
-            background: showForm ? "#1B4332" : "#FFFFFF",
-            borderRadius: 8,
-            padding: "6px 12px",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
-          {showForm ? "Cancel" : "+ Add player"}
-        </button>
-      </div>
+      <ScreenHeader
+        title="Players"
+        onBack={onBack}
+        backLabel="Back to More"
+        right={
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            style={{
+              border: "1px solid #1B4332",
+              color: "#1B4332",
+              background: showForm ? "#1B4332" : "#FFFFFF",
+              borderRadius: 8,
+              padding: "6px 12px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            {showForm ? "Cancel" : "+ Add player"}
+          </button>
+        }
+      />
 
       {!showForm && isLive && years.length > 0 && (
         <div style={{ marginBottom: 14 }}>
@@ -6565,14 +6463,13 @@ function PlayersScreen({ onBack, isLive, currentEventId, currentYear }) {
               <Banner tone="error">Couldn't save to Supabase — check the console. Nothing was lost, try again.</Banner>
             </div>
           )}
-          <button
-            className="bco-save-btn"
+          <Button
             style={{ marginTop: 4 }}
             onClick={handleAdd}
             disabled={!form.name.trim() || !form.handicapIndex || addStatus === "saving"}
           >
             {addStatus === "saving" ? "Saving…" : "Add player"}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -6677,14 +6574,13 @@ function PlayersScreen({ onBack, isLive, currentEventId, currentYear }) {
                         >
                           Cancel
                         </button>
-                        <button
-                          className="bco-save-btn"
+                        <Button
                           style={{ flex: 1 }}
                           onClick={() => saveEdit(p)}
                           disabled={!editForm.name.trim() || editStatus === "saving"}
                         >
                           {editStatus === "saving" ? "Saving…" : "Save"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ) : (
@@ -6990,32 +6886,31 @@ function CoursesScreen({ onBack, isLive }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to More">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332", flex: 1 }}>
-          Courses
-        </span>
-        {step === "closed" && (
-          <button
-            onClick={startAdd}
-            style={{
-              border: "1px solid #1B4332",
-              color: "#1B4332",
-              background: "#FFFFFF",
-              borderRadius: 8,
-              padding: "6px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "'Inter', sans-serif",
-            }}
-          >
-            + Add course-tee
-          </button>
-        )}
-      </div>
+      <ScreenHeader
+        title="Courses"
+        onBack={onBack}
+        backLabel="Back to More"
+        right={
+          step === "closed" && (
+            <button
+              onClick={startAdd}
+              style={{
+                border: "1px solid #1B4332",
+                color: "#1B4332",
+                background: "#FFFFFF",
+                borderRadius: 8,
+                padding: "6px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "'Inter', sans-serif",
+              }}
+            >
+              + Add course-tee
+            </button>
+          )
+        }
+      />
 
       {step === "closed" && isLive && years.length > 0 && (
         <div style={{ marginBottom: 14 }}>
@@ -7100,9 +6995,9 @@ function CoursesScreen({ onBack, isLive }) {
             >
               Cancel
             </button>
-            <button className="bco-save-btn" style={{ flex: 1 }} onClick={goToHoles} disabled={!form.name.trim() || !form.rating || !form.slope}>
+            <Button style={{ flex: 1 }} onClick={goToHoles} disabled={!form.name.trim() || !form.rating || !form.slope}>
               Next: enter holes
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -7172,9 +7067,9 @@ function CoursesScreen({ onBack, isLive }) {
             >
               Back
             </button>
-            <button className="bco-save-btn" style={{ flex: 1 }} onClick={handleSaveCourse} disabled={saveStatus === "saving"}>
+            <Button style={{ flex: 1 }} onClick={handleSaveCourse} disabled={saveStatus === "saving"}>
               {saveStatus === "saving" ? "Saving…" : "Save course"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -7311,26 +7206,6 @@ function FormField({ label, children }) {
       <div style={{ fontSize: 11, fontWeight: 600, color: "#6B6455", marginBottom: 4 }}>{label}</div>
       {children}
     </div>
-  );
-}
-
-function FormInput({ value, onChange, type = "text", placeholder }) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      style={{
-        width: "100%",
-        boxSizing: "border-box",
-        border: "1px solid #DCD6C4",
-        borderRadius: 8,
-        padding: "8px 10px",
-        fontSize: 13,
-        fontFamily: "'Inter', sans-serif",
-      }}
-    />
   );
 }
 
@@ -7476,14 +7351,7 @@ function ExportResults({ onBack, isLive, currentEventId }) {
 
   return (
     <div style={{ padding: "14px 20px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 14 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to Admin">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Export results
-        </span>
-      </div>
+      <ScreenHeader title="Export results" onBack={onBack} backLabel="Back to Admin" />
 
       <AutoComputedNote>
         {isLive
@@ -7525,9 +7393,9 @@ function ExportResults({ onBack, isLive, currentEventId }) {
         </div>
       )}
 
-      <button className="bco-save-btn" onClick={handleExport} disabled={!anySelected || status === "exporting"}>
+      <Button onClick={handleExport} disabled={!anySelected || status === "exporting"}>
         {status === "exporting" ? "Exporting…" : "Export CSV"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -7792,18 +7660,7 @@ function RecordBook({ onBack, isLive, myPlayer }) {
   return (
     <div style={{ padding: "14px 20px 24px" }}>
       <div className="bco-sticky-header" style={{ paddingBottom: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
-        <button
-          onClick={onBack}
-          style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }}
-          aria-label="Back to More"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <span className="bco-display" style={{ fontSize: 19, fontWeight: 600, color: "#1B4332" }}>
-          Record Book
-        </span>
-      </div>
+      <ScreenHeader title="Record Book" onBack={onBack} backLabel="Back to More" marginBottom={10} />
 
       <div className="bco-seg" style={{ marginBottom: 10 }}>
         <button
@@ -8046,37 +7903,23 @@ function EarningsTable({ snapshots, years, year, loading, isLive }) {
 
 function YearPill({ label, active, onClick }) {
   return (
-    <button
+    <Pill
+      as="button"
       onClick={onClick}
-      style={{
-        flexShrink: 0,
-        border: `1px solid ${active ? "#1B4332" : "#E4DFCE"}`,
-        background: active ? "#1B4332" : "#FFFFFF",
-        color: active ? "#F3EFE2" : "#6B6455",
-        borderRadius: 999,
-        padding: "6px 13px",
-        fontSize: 12,
-        fontWeight: 600,
-        fontFamily: "'Inter', sans-serif",
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-      }}
+      bg={active ? "#1B4332" : "#FFFFFF"}
+      fg={active ? "#F3EFE2" : "#6B6455"}
+      border={`1px solid ${active ? "#1B4332" : "#E4DFCE"}`}
+      fontSize={12}
+      padding="6px 13px"
+      style={{ flexShrink: 0, fontFamily: "'Inter', sans-serif", cursor: "pointer" }}
     >
       {label}
-    </button>
+    </Pill>
   );
 }
 
 function StatBlock({ label, value, sub }) {
-  return (
-    <div style={{ background: "#F3EFE2", borderRadius: 8, padding: "7px 9px" }}>
-      <div style={{ fontSize: 9.5, fontWeight: 600, color: "#8A8371", letterSpacing: "0.02em" }}>{label.toUpperCase()}</div>
-      <div className="bco-mono" style={{ fontSize: 14, fontWeight: 600, color: "#2C2A22", marginTop: 1 }}>
-        {value}
-      </div>
-      {sub && <div style={{ fontSize: 9.5, color: "#A39C89" }}>{sub}</div>}
-    </div>
-  );
+  return <StatTile variant="block" label={label} value={value} sub={sub} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -8369,36 +8212,22 @@ function MatchResultsTab({ scoresStore, currentYear, isLive, currentEventId }) {
 function ProgressBadge({ progress }) {
   if (progress.final) {
     return (
-      <span
-        style={{
-          fontSize: 10.5,
-          fontWeight: 700,
-          padding: "2px 8px",
-          borderRadius: 999,
-          background: "#1B4332",
-          color: "#F3EFE2",
-        }}
-      >
+      <Pill fontWeight={700} padding="2px 8px" bg="#1B4332" fg="#F3EFE2">
         F
-      </span>
+      </Pill>
     );
   }
   if (progress.marker === 0) {
     return <span style={{ fontSize: 10, color: "#B4AE9E" }}>Not started</span>;
   }
   return (
-    <span
-      style={{
-        fontSize: 10.5,
-        fontWeight: 600,
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: "#EDEAE0",
-        color: "#3F3B32",
-      }}
+    <Pill
+      padding="2px 8px"
+      bg="#EDEAE0"
+      fg="#3F3B32"
     >
       Thru {progress.marker}
-    </span>
+    </Pill>
   );
 }
 
@@ -9173,19 +9002,13 @@ function SoloRoundScorecard({ playerName, roundLabel, onBack, isLive, roundsData
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back to standings">
-          <ChevronLeft size={18} />
-        </button>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "#1B4332" }}>
-            {playerName} · {roundLabel}
-          </div>
-          <div style={{ fontSize: 10.5, color: "#8A8371" }}>
-            {course.name} {holes.length > 0 && `· ${totalScore} (${fmtDiff(totalScore - totalPar)})`}
-          </div>
-        </div>
-      </div>
+      <ScreenHeader
+        variant="compact"
+        onBack={onBack}
+        backLabel="Back to standings"
+        title={<>{playerName} · {roundLabel}</>}
+        subtitle={<>{course.name} {holes.length > 0 && `· ${totalScore} (${fmtDiff(totalScore - totalPar)})`}</>}
+      />
 
       {liveLoading && <div style={{ fontSize: 12, color: "#8A8371", marginBottom: 10 }}>Loading scorecard…</div>}
       {liveError && (
@@ -9463,12 +9286,9 @@ function TeamTable({ isLive, currentEventId, currentYear, roundsData }) {
 function PointsBadge({ points }) {
   const tone = points === 1 ? { bg: "#DCEFE3", fg: "#1B4332" } : points === 0 ? { bg: "#F7DCDA", fg: "#8C2F2A" } : { bg: "#EDEAE0", fg: "#3F3B32" };
   return (
-    <span
-      className="bco-mono"
-      style={{ display: "inline-block", minWidth: 26, padding: "2px 0", borderRadius: 999, fontSize: 12, fontWeight: 600, background: tone.bg, color: tone.fg }}
-    >
+    <Pill mono bg={tone.bg} fg={tone.fg} fontSize={12} padding="2px 0" style={{ display: "inline-block", minWidth: 26 }}>
       {points}
-    </span>
+    </Pill>
   );
 }
 
@@ -9510,21 +9330,12 @@ function MatchScorecard({ isLive, roundId, roundLabel, matchupId, teamAName, tea
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
-        <button onClick={onBack} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }} aria-label="Back">
-          <ChevronLeft size={18} />
-        </button>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "#1B4332" }}>
-            {teamAName} vs {teamBName} · {roundLabel}
-          </div>
-          {rows && rows.length > 0 && (
-            <div style={{ fontSize: 10.5, color: "#8A8371" }}>
-              {totalA} – {totalB}
-            </div>
-          )}
-        </div>
-      </div>
+      <ScreenHeader
+        variant="compact"
+        onBack={onBack}
+        title={<>{teamAName} vs {teamBName} · {roundLabel}</>}
+        subtitle={rows && rows.length > 0 ? <>{totalA} – {totalB}</> : undefined}
+      />
 
       {loading && <div style={{ fontSize: 12, color: "#8A8371" }}>Loading scorecard…</div>}
       {!loading && error && (
@@ -9702,19 +9513,14 @@ function CarrollCupTable({ isLive, currentEventId, roundsData }) {
     const matches = isRealData ? drilldownMatches : CARROLL_CUP_MATCHES_BY_ROUND[drilldown] || [];
     return (
       <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
-          <button
-            onClick={() => {
-              setDrilldown(null);
-              setDrilldownMatches(null);
-            }}
-            style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex", color: "#6B6455" }}
-            aria-label="Back"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#1B4332" }}>Carroll Cup · {drilldown}</span>
-        </div>
+        <ScreenHeader
+          variant="compact"
+          onBack={() => {
+            setDrilldown(null);
+            setDrilldownMatches(null);
+          }}
+          title={<>Carroll Cup · {drilldown}</>}
+        />
 
         {!isRealData && (
           <div style={{ fontSize: 10, color: "#A39C89", marginBottom: 10, lineHeight: 1.5 }}>Not connected to Supabase — showing local demo data.</div>
@@ -9872,78 +9678,19 @@ function StatusBadge({ status }) {
     "in-progress": { label: "In progress", bg: "#FBEAD9", fg: "#8A4B1E" },
   };
   const s = map[status] || { label: "Not started", bg: "#EDEAE0", fg: "#6B6455" };
-  return (
-    <span
-      style={{
-        fontSize: 10.5,
-        fontWeight: 600,
-        padding: "3px 9px",
-        borderRadius: 999,
-        background: s.bg,
-        color: s.fg,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {s.label}
-    </span>
-  );
-}
-
-function Banner({ tone, children }) {
-  const styles =
-    tone === "error"
-      ? { bg: "#F7DCDA", fg: "#8C2F2A", border: "#D98884" }
-      : tone === "info"
-      ? { bg: "#F3EFE2", fg: "#6B6455", border: "#DCD6C4" }
-      : { bg: "#DCEFE3", fg: "#1B4332", border: "#6FAE8C" };
-  return (
-    <div style={{ fontSize: 13, padding: "9px 12px", borderRadius: 8, background: styles.bg, color: styles.fg, border: `1px solid ${styles.border}` }}>
-      {children}
-    </div>
-  );
+  return <Pill bg={s.bg} fg={s.fg}>{s.label}</Pill>;
 }
 
 function StrokeBubble({ label, value, unavailable }) {
-  const getsStroke = value === 1;
-  return (
-    <div
-      style={{
-        background: getsStroke ? "#DCEFE3" : "#F3EFE2",
-        border: `1px solid ${getsStroke ? "#B7DCC6" : "#E4DFCE"}`,
-        borderRadius: 8,
-        padding: "7px 8px",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ fontSize: 9.5, fontWeight: 600, color: "#8A8371", letterSpacing: "0.03em" }}>{label.toUpperCase()}</div>
-      <div className="bco-mono" style={{ fontSize: 14, fontWeight: 600, color: getsStroke ? "#1B4332" : "#6B6455", marginTop: 1 }}>
-        {unavailable ? "–" : value}
-      </div>
-    </div>
-  );
+  return <StatTile variant="stroke" label={label} value={value} unavailable={unavailable} />;
 }
 
 function HcpBubble({ label, value }) {
-  return (
-    <div style={{ background: "rgba(255,255,255,0.10)", borderRadius: 8, padding: "6px 4px", textAlign: "center" }}>
-      <div style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.75, letterSpacing: "0.03em" }}>{label}</div>
-      <div className="bco-mono" style={{ fontSize: 15, fontWeight: 600, marginTop: 1 }}>
-        {value}
-      </div>
-    </div>
-  );
+  return <StatTile variant="hcp" label={label} value={value} />;
 }
 
 function TotalStat({ label, value, sub, emphasize }) {
-  return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "#8A8371", letterSpacing: "0.03em" }}>{label}</div>
-      <div className="bco-mono" style={{ fontSize: emphasize ? 24 : 20, fontWeight: 600, color: "#1B4332", marginTop: 2 }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 10, color: "#A39C89" }}>{sub}</div>
-    </div>
-  );
+  return <StatTile variant="total" label={label} value={value} sub={sub} emphasize={emphasize} />;
 }
 
 function StubScreen({ icon: Icon, title, note }) {

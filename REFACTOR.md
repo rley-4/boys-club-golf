@@ -72,18 +72,38 @@ inline styles and the duplication in a single pass.
 
 ### Duplicates to collapse
 
-- [ ] **Selects (3 implementations → 1):** `FormSelect` (line 3173),
-      `LightSelect` (line 2901), and the `.bco-select` CSS class.
-- [ ] **Inputs → 1:** `FormInput` (line 7318) + **17 raw `<input>`** scattered inline.
-- [ ] **Buttons → small variant set:** **105 raw `<button>`** plus
-      `.bco-save-btn`, `.bco-nav-btn`, `.bco-step-btn`.
-- [ ] **`<ScreenHeader title onBack/>`:** the `ChevronLeft` + title header is
-      duplicated across **20 screens** (55 `onBack` props).
-- [ ] **Badges → 1 `Pill`:** `StatusBadge`, `ProgressBadge`, `PointsBadge`, `YearPill`.
-- [ ] **Stat tiles → 1 `StatTile` (with variants):** `StatBlock`, `TotalStat`,
-      `StrokeBubble`, `HcpBubble`.
-- [ ] **Admin menus:** `AdminSetupMenu` / `AdminResultsMenu` +
+- [x] **Selects (3 implementations → 1):** `FormSelect` (line 3173),
+      `LightSelect` (line 2901), and the `.bco-select` CSS class. (`LightSelect`
+      turned out to be dead code — deleted. `FormSelect` moved to
+      `src/components/FormSelect.jsx`. The `.bco-select` CSS class is a
+      differently-shaped dark-background select used only in the score-entry
+      header bar; left as-is rather than force it into `FormSelect`'s shape.)
+- [x] **Inputs → 1:** `FormInput` (line 7318) + **17 raw `<input>`** scattered inline.
+      (`FormInput` moved to `src/components/FormInput.jsx` and now covers every
+      settings/admin text field; the raw `<input>`s that remain are the
+      dark-header score/net-score inputs and CSV file pickers, which aren't the
+      same control and are left for the P1 MUI `TextField` pass.)
+- [x] **Buttons → small variant set:** **105 raw `<button>`** plus
+      `.bco-save-btn`, `.bco-nav-btn`, `.bco-step-btn`. (Added
+      `src/components/Button.jsx` with `save`/`nav`/`step` variants and swapped
+      every call site that used those three CSS classes. The one save-button
+      with conditional styling (score-entry Submit button) and the ~90 other
+      one-off inline-styled buttons are deferred to the P1 MUI `Button`
+      migration, where they get replaced outright instead of re-wrapped twice.)
+- [x] **`<ScreenHeader title onBack/>`:** the `ChevronLeft` + title header is
+      duplicated across **20 screens** (55 `onBack` props). (Added
+      `src/components/ScreenHeader.jsx` with `large`/`compact` variants; all 19
+      call sites converted.)
+- [x] **Badges → 1 `Pill`:** `StatusBadge`, `ProgressBadge`, `PointsBadge`, `YearPill`.
+      (Added `src/components/Pill.jsx`; the four components are now thin
+      wrappers around it so none of their call sites needed to change.)
+- [x] **Stat tiles → 1 `StatTile` (with variants):** `StatBlock`, `TotalStat`,
+      `StrokeBubble`, `HcpBubble`. (Added `src/components/StatTile.jsx` with a
+      `variant` prop; same thin-wrapper approach as `Pill`.)
+- [x] **Admin menus:** `AdminSetupMenu` / `AdminResultsMenu` +
       `AdminIconButton` / `AdminIconRow` — make data-driven from a config array.
+      (Both menus now render from `ADMIN_SETUP_SECTIONS` / `ADMIN_RESULTS_SECTIONS`
+      config arrays via a shared `AdminMenu`.)
 
 ### New home
 
