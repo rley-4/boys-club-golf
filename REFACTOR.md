@@ -120,6 +120,58 @@ src/components/
 
 ---
 
+## P2 — Split `AppShell.jsx` into a file tree
+
+**Why:** biggest win for "editable by AI agents" — an agent editing the poker
+panel should load ~220 lines, not 9,960. The file already has clean internal
+seams (each tab/screen is its own component); this is mostly *moving* them.
+Promoted ahead of P1 — see the reorder note above.
+
+### Target structure
+
+```
+src/
+  data/dummyData.js          # PLAYERS, COURSES, TEAMS, WIREFRAME_YEARS, etc. (done)
+  hooks/useYearRoundData.js  # (line 8453)
+  lib/format.js              # ordinal, fmtDiff, fmtStat, scoreLabel, scoreTone, diffTone (done)
+  components/                # shared primitives from P0 (done)
+  screens/
+    ScoreEntry.jsx                 # 871–1783
+    Messages.jsx                   # 1880–2101
+    More.jsx                       # 2930–3067
+    Games/                         # GamesTab, Poker/Skins/Ctp/LowNet panels
+    Leaderboard/                   # Leaderboard, Solo/Team/CarrollCup tables, scorecards
+    MatchResults.jsx               # 8151–9475
+  admin/
+    settings/                      # Roles, Year, TeamSetup, RoundSetup, MatchupSetup, Games, Competition
+    ImportResults.jsx  ExportResults.jsx
+    PlayersScreen.jsx  CoursesScreen.jsx
+  RecordBook/
+  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines)
+```
+
+Target: ~40 files of 50–400 lines instead of one 9,960-line file.
+
+### Tasks
+
+- [x] Move seed data to `src/data/dummyData.js` **first** (many components
+      import it). (Named `dummyData.js` rather than `seed.js` — matches the
+      comment header already in the file describing it as wireframe/demo data.)
+- [x] Extract format/helper functions to `src/lib/format.js`.
+- [ ] Move each screen/admin component to its own file, updating imports.
+- [ ] Reduce `AppShell.jsx` to the shell + tab routing.
+
+### ⚠️ Risk note
+
+Module-level **mutable** arrays/objects (`PLAYERS`, `COURSES`,
+`ROUND_ID_BY_LABEL`, `ROUND_COURSE`, `ROUND_FLAGS`, `ROUND_FORMATS`,
+`SCORE_ROUNDS`) are hydrated in place by `App.jsx` and `refreshRoundMap`, and
+imported by many components. Keep them in `data/dummyData.js` and import from
+there so the split stays behavior-preserving. **Do not** convert them to
+React state as part of this step (see P3).
+
+---
+
 ## P1 — Adopt MUI where it replaces hand-rolled UI
 
 **Why:** MUI is already installed but used in exactly one spot
@@ -150,55 +202,6 @@ Reference: `.cursor/rules/mui-and-styling.mdc` (links MUI component/API/`sx`/the
 
 ---
 
-## P2 — Split `AppShell.jsx` into a file tree
-
-**Why:** biggest win for "editable by AI agents" — an agent editing the poker
-panel should load ~220 lines, not 9,960. The file already has clean internal
-seams (each tab/screen is its own component); this is mostly *moving* them.
-
-### Target structure
-
-```
-src/
-  data/seed.js               # PLAYERS, COURSES, TEAMS, WIREFRAME_YEARS (106–362, 8088+)
-  hooks/useYearRoundData.js  # (line 8453)
-  lib/format.js              # ordinal, fmtDiff, fmtStat, scoreLabel, scoreTone, diffTone
-  components/                # shared primitives from P0
-  screens/
-    ScoreEntry.jsx                 # 871–1783
-    Messages.jsx                   # 1880–2101
-    More.jsx                       # 2930–3067
-    Games/                         # GamesTab, Poker/Skins/Ctp/LowNet panels
-    Leaderboard/                   # Leaderboard, Solo/Team/CarrollCup tables, scorecards
-    MatchResults.jsx               # 8151–9475
-  admin/
-    settings/                      # Roles, Year, TeamSetup, RoundSetup, MatchupSetup, Games, Competition
-    ImportResults.jsx  ExportResults.jsx
-    PlayersScreen.jsx  CoursesScreen.jsx
-  RecordBook/
-  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines)
-```
-
-Target: ~40 files of 50–400 lines instead of one 9,960-line file.
-
-### Tasks
-
-- [ ] Move seed data to `src/data/seed.js` **first** (many components import it).
-- [ ] Extract format/helper functions to `src/lib/format.js`.
-- [ ] Move each screen/admin component to its own file, updating imports.
-- [ ] Reduce `AppShell.jsx` to the shell + tab routing.
-
-### ⚠️ Risk note
-
-Module-level **mutable** arrays/objects (`PLAYERS`, `COURSES`,
-`ROUND_ID_BY_LABEL`, `ROUND_COURSE`, `ROUND_FLAGS`, `ROUND_FORMATS`,
-`SCORE_ROUNDS`) are hydrated in place by `App.jsx` and `refreshRoundMap`, and
-imported by many components. Keep them in `data/seed.js` and import from there
-so the split stays behavior-preserving. **Do not** convert them to React
-state as part of this step (see P3).
-
----
-
 ## P3 — Ongoing hygiene / longer-term
 
 - [ ] Replace the in-place mutation of module-level arrays (`PLAYERS`,
@@ -222,8 +225,16 @@ state as part of this step (see P3).
 
 1. **P0 — theme tokens** (no behavior change, low risk)
 2. **P0 — shared primitives + collapse duplicates**
-3. **P1 — MUI adoption** (theme-driven, incremental)
-4. **P2 — split `AppShell.jsx`** (seed data → helpers → screens → shell)
+3. **P2 — split `AppShell.jsx`** (seed data → helpers → screens → shell)
+4. **P1 — MUI adoption** (theme-driven, incremental)
 5. **P3 — hygiene / state model**
 
 Steps 1–2 alone remove most of the 778 inline styles and the duplication.
+
+**Reordered 2026-07-21:** P2 (file split) was originally scheduled after P1
+(MUI adoption), but the file split is the higher-leverage change for the
+project's actual goal — a 9,960-line file is the thing making both humans
+and AI agents slow to work in, not the lack of MUI components. Splitting
+first also means the P1 MUI swaps happen in small, focused files instead of
+one giant one. P1 is unaffected by this reorder — it's still theme-driven
+and incremental, it just now lands on top of the split file tree.

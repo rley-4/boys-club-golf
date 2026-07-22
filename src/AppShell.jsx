@@ -105,6 +105,7 @@ import { FormSelect } from "./components/FormSelect.jsx";
 import { FormInput } from "./components/FormInput.jsx";
 import { Banner } from "./components/Banner.jsx";
 import { Button } from "./components/Button.jsx";
+import { scoreLabel, scoreTone, fmtDiff, fmtStat, diffTone, ordinal } from "./lib/format.js";
 import {
   COURSES,
   ROUND_COURSE,
@@ -301,50 +302,11 @@ function computeMatchPopsLive(player, roundId, teams, matchups, course, totalPar
   return playerCH - minCH;
 }
 
-function scoreLabel(diff) {
-  if (diff <= -3) return "Albatross";
-  if (diff === -2) return "Eagle";
-  if (diff === -1) return "Birdie";
-  if (diff === 0) return "Par";
-  if (diff === 1) return "Bogey";
-  if (diff === 2) return "Double";
-  return `+${diff}`;
-}
-
-function scoreTone(diff) {
-  if (diff <= -1) return { bg: "#DCEFE3", fg: "#1B4332", border: "#6FAE8C" };
-  if (diff === 0) return { bg: "#EDEAE0", fg: "#3F3B32", border: "#B9B3A2" };
-  if (diff === 1) return { bg: "#FBEAD9", fg: "#8A4B1E", border: "#D89A66" };
-  return { bg: "#F7DCDA", fg: "#8C2F2A", border: "#D98884" };
-}
-
-function fmtDiff(n) {
-  if (n === 0) return "E";
-  return n > 0 ? `+${n}` : `${n}`;
-}
-
 const MEDAL_TONES = {
   gold: { bg: "#F5E1A4", fg: "#7A5C0A" },
   silver: { bg: "#E4E4E4", fg: "#5A5A5A" },
   bronze: { bg: "#EAD0B3", fg: "#8A5A2B" },
 };
-
-// Postgres numeric/bigint aggregates come back as strings through
-// PostgREST — anything arithmetic done on them client-side (sums, averages)
-// needs coercing first, or "+" silently concatenates instead of adding.
-// This is the last line of defense: never let a bad/missing value crash
-// the render, show "–" instead.
-function fmtStat(n, digits = 1) {
-  const num = Number(n);
-  return Number.isFinite(num) ? num.toFixed(digits) : "–";
-}
-
-function diffTone(n) {
-  if (n <= -1) return { bg: "#DCEFE3", fg: "#1B4332" };
-  if (n === 0) return { bg: "#EDEAE0", fg: "#3F3B32" };
-  if (n <= 2) return { bg: "#FBEAD9", fg: "#8A4B1E" };
-  return { bg: "#F7DCDA", fg: "#8C2F2A" };
-}
 
 const NET_DOUBLE_BOGEY = 2; // cap: net score can be at most par + 2
 
@@ -8111,22 +8073,6 @@ function RoundPicker({ rounds, selectedRound, setSelectedRound }) {
       ))}
     </div>
   );
-}
-
-function ordinal(n) {
-  if (n == null) return "";
-  const rem100 = n % 100;
-  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1:
-      return `${n}st`;
-    case 2:
-      return `${n}nd`;
-    case 3:
-      return `${n}rd`;
-    default:
-      return `${n}th`;
-  }
 }
 
 // Walks a list already sorted by yearRank and, for each pair of
