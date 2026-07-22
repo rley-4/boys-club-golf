@@ -147,11 +147,11 @@ src/
     ImportResults.jsx  ExportResults.jsx   # not moved yet
     PlayersScreen.jsx  CoursesScreen.jsx   # not moved yet
   RecordBook/                # not moved yet
-  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines) — currently 8120 lines
+  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines) — currently 6472 lines
 ```
 
 Target: ~40 files of 50–400 lines instead of one 9,960-line file. Progress:
-9960 → 9443 (seed data, external commit) → 8120 lines so far.
+9960 → 9443 (seed data, external commit) → 8120 → 6472 lines so far.
 
 ### Tasks
 
@@ -164,15 +164,25 @@ Target: ~40 files of 50–400 lines instead of one 9,960-line file. Progress:
       `src/components/YearRoundPicker.jsx`.
 - [x] Move `MessagesScreen` to `src/screens/Messages.jsx`.
 - [x] Move `GamesTab` + Poker/Skins/Ctp/LowNet panels to `src/screens/Games.jsx`.
+- [x] Extract shared `FormField` to `src/components/FormField.jsx` (used by
+      ~30 admin forms).
+- [x] Move `PlayersScreen` to `src/admin/PlayersScreen.jsx`.
+- [x] Move `CoursesScreen` (+ `defaultHoles`/`validateHoles`) to
+      `src/admin/CoursesScreen.jsx`.
+- [x] Extract shared yearly-stats helpers (`soloRecordsSorted`,
+      `teamRecordsSorted`, `seededRand`, `attendedYears`, `yearlySoloStat`,
+      `yearlyTeamStat` — used by both Record Book and Export) to
+      `src/lib/yearlyStats.js`.
+- [x] Move `RecordBook` (+ `EarningsTable`) to `src/screens/RecordBook.jsx`.
 - [ ] Move each remaining screen/admin component to its own file, updating
       imports — in progress. Remaining, in dependency order (leaves first):
       admin `settings/*` (Roles, Year, TeamSetup, RoundSetup, MatchupSetup,
       GamesSetup, GamesResults, CompetitionSetup, CompetitionResults) →
-      `ImportResults`/`ExportResults` → `PlayersScreen`/`CoursesScreen` →
+      `ImportResults`/`ExportResults` →
       `AdminSetupMenu`/`AdminResultsMenu` (already data-driven, just needs
-      moving) → `RecordBook`/`EarningsTable` → `More` (imports all of the
-      above) → `ScoreEntry` → `Leaderboard` + Solo/Team/CarrollCup
-      tables/scorecards → `MatchResultsTab`.
+      moving) → `More` (imports all of the above) → `ScoreEntry` →
+      `Leaderboard` + Solo/Team/CarrollCup tables/scorecards →
+      `MatchResultsTab`.
 - [ ] Reduce `AppShell.jsx` to the shell + tab routing.
 
 ### ⚠️ Risk note
