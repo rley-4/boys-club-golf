@@ -31,6 +31,31 @@ Four things changed after the initial schema:
 4. **Copy `.env.example` to `.env`** and paste those two values in.
 5. **Restart the dev server** (`npm run dev`) if it was already running.
 
+## Database migrations
+
+Migrations are managed with the [Supabase CLI](https://supabase.com/docs/guides/local-development), installed as a dev dependency (so `npm install` gets it — nothing to install globally). The `supabase/` folder holds `config.toml` and, going forward, a `supabase/migrations/` folder of timestamped SQL files. The CLI keeps a ledger of which migrations a database has already had applied, so you apply *the diff* instead of eyeballing which numbered file to run.
+
+**npm commands** (thin wrappers around the CLI):
+
+| Command | What it does |
+| --- | --- |
+| `npm run db:link` | One-time: link this repo to your Supabase project (`npm run db:link -- --project-ref <ref>`). Needs an access token — run `npx supabase login` first. |
+| `npm run migrate:new -- <name>` | Create a new timestamped migration file under `supabase/migrations/`. |
+| `npm run migrate:up` | Apply all un-applied migrations to the linked (remote) database (`supabase db push`). |
+| `npm run migrate:list` | Show which migrations are applied locally vs. remotely. |
+| `npm run migrate:diff -- -f <name>` | Generate a migration from schema changes you've made (e.g. via Studio). |
+| `npm run migrate:reset` | Rebuild the **local** database from scratch by replaying every migration — the fastest way to prove a clean install still works end to end. |
+| `npm run supabase:start` / `npm run supabase:stop` | Start/stop the local Supabase stack (Postgres, Studio, etc.) for offline development. Requires Docker. |
+
+**Typical flow for a schema change:**
+
+1. `npm run migrate:new -- add_something` — creates `supabase/migrations/<timestamp>_add_something.sql`.
+2. Write your SQL in that file. Keep it idempotent where practical (`add column if not exists`, `create or replace view`).
+3. `npm run migrate:reset` — verify it applies cleanly against a fresh local DB.
+4. `npm run migrate:up` — apply it to the real project when you're happy.
+
+**About the existing `sql/` files:** the numbered files in `sql/` (`01_schema.sql` … `41_record_book_cache.sql`) are the historical record and still work if you paste them into the Supabase SQL Editor in order (see "Connecting a real backend" above). They are **not** yet under CLI management. To move to a fully tool-managed workflow, do this once: create `supabase/migrations/` and copy each `sql/NN_*.sql` into it renamed with a sortable timestamp-style prefix (e.g. `00001_schema.sql`, `00002_calculations.sql`, …) preserving order, then run `npm run migrate:reset` to confirm they replay cleanly. After that, `sql/` can be retired in favor of `supabase/migrations/`.
+
 ## What's actually wired to Supabase right now
 
 This is a first pass — "portions" driving off the backend, not the whole app yet:

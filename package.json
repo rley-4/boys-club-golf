@@ -6,7 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:link": "supabase link",
+    "migrate:new": "supabase migration new",
+    "migrate:list": "supabase migration list",
+    "migrate:up": "supabase db push",
+    "migrate:reset": "supabase db reset",
+    "migrate:diff": "supabase db diff",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -20,6 +28,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.3",
+    "supabase": "^2.109.1",
     "vite": "^8.1.4"
   }
 }
