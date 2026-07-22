@@ -143,15 +143,15 @@ src/
     Leaderboard/                   # not moved yet — Leaderboard, Solo/Team/CarrollCup tables, scorecards
     MatchResults.jsx               # not moved yet
   admin/
-    settings/                      # not moved yet — Roles, Year, TeamSetup, RoundSetup, MatchupSetup, Games, Competition
+    settings/                      # done — Roles, Year, TeamSetup, RoundSetup, MatchupSetup, GamesSetup/Results, CompetitionSetup/Results
     ImportResults.jsx  ExportResults.jsx   # not moved yet
-    PlayersScreen.jsx  CoursesScreen.jsx   # not moved yet
-  RecordBook/                # not moved yet
-  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines) — currently 6472 lines
+    PlayersScreen.jsx  CoursesScreen.jsx   # done
+  screens/RecordBook.jsx      # done
+  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines) — currently 4219 lines
 ```
 
 Target: ~40 files of 50–400 lines instead of one 9,960-line file. Progress:
-9960 → 9443 (seed data, external commit) → 8120 → 6472 lines so far.
+9960 → 9443 (seed data, external commit) → 8120 → 6472 → 4219 lines so far.
 
 ### Tasks
 
@@ -174,10 +174,19 @@ Target: ~40 files of 50–400 lines instead of one 9,960-line file. Progress:
       `yearlyTeamStat` — used by both Record Book and Export) to
       `src/lib/yearlyStats.js`.
 - [x] Move `RecordBook` (+ `EarningsTable`) to `src/screens/RecordBook.jsx`.
+- [x] Extract shared admin-settings chrome to `src/components/`
+      (`SettingsSection`, `RemoveButton`/`AddRowButton`,
+      `RecalcRow`/`LastCalculatedNote`/`RecalculateControl`,
+      `AutoComputedNote`) and `formatCalculatedAt` to `lib/format.js`.
+- [x] Move all nine admin `settings/*` screens to `src/admin/settings/`:
+      Roles, Year, TeamSetup, RoundSetup, MatchupSetup, GamesSetup,
+      GamesResults, CompetitionSetup, CompetitionResults. Along the way,
+      fixed a real bug (`AutoComputedNote` was an undefined reference in
+      several of these screens after the earlier Games extraction — same-file
+      function hoisting had been masking it) and deleted a dead
+      `COMPETITION_LABELS` constant.
 - [ ] Move each remaining screen/admin component to its own file, updating
       imports — in progress. Remaining, in dependency order (leaves first):
-      admin `settings/*` (Roles, Year, TeamSetup, RoundSetup, MatchupSetup,
-      GamesSetup, GamesResults, CompetitionSetup, CompetitionResults) →
       `ImportResults`/`ExportResults` →
       `AdminSetupMenu`/`AdminResultsMenu` (already data-driven, just needs
       moving) → `More` (imports all of the above) → `ScoreEntry` →
