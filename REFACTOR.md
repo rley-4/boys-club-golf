@@ -131,26 +131,27 @@ Promoted ahead of P1 — see the reorder note above.
 
 ```
 src/
-  data/dummyData.js          # PLAYERS, COURSES, TEAMS, WIREFRAME_YEARS, etc. (done)
-  hooks/useYearRoundData.js  # (line 8453)
+  data/dummyData.js          # PLAYERS, COURSES, TEAMS, WIREFRAME_YEARS, + ROUND_* mutable maps (done)
+  hooks/useYearRoundData.js  # (done)
   lib/format.js              # ordinal, fmtDiff, fmtStat, scoreLabel, scoreTone, diffTone (done)
-  components/                # shared primitives from P0 (done)
+  components/                # shared primitives from P0, + YearRoundPicker.jsx (done)
   screens/
-    ScoreEntry.jsx                 # 871–1783
-    Messages.jsx                   # 1880–2101
-    More.jsx                       # 2930–3067
-    Games/                         # GamesTab, Poker/Skins/Ctp/LowNet panels
-    Leaderboard/                   # Leaderboard, Solo/Team/CarrollCup tables, scorecards
-    MatchResults.jsx               # 8151–9475
+    ScoreEntry.jsx                 # not moved yet
+    Messages.jsx                   # done
+    More.jsx                       # not moved yet
+    Games.jsx                      # done — GamesTab, Poker/Skins/Ctp/LowNet panels
+    Leaderboard/                   # not moved yet — Leaderboard, Solo/Team/CarrollCup tables, scorecards
+    MatchResults.jsx               # not moved yet
   admin/
-    settings/                      # Roles, Year, TeamSetup, RoundSetup, MatchupSetup, Games, Competition
-    ImportResults.jsx  ExportResults.jsx
-    PlayersScreen.jsx  CoursesScreen.jsx
-  RecordBook/
-  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines)
+    settings/                      # not moved yet — Roles, Year, TeamSetup, RoundSetup, MatchupSetup, Games, Competition
+    ImportResults.jsx  ExportResults.jsx   # not moved yet
+    PlayersScreen.jsx  CoursesScreen.jsx   # not moved yet
+  RecordBook/                # not moved yet
+  AppShell.jsx               # shell only: nav, ThemeProvider, tab routing (~150 lines) — currently 8120 lines
 ```
 
-Target: ~40 files of 50–400 lines instead of one 9,960-line file.
+Target: ~40 files of 50–400 lines instead of one 9,960-line file. Progress:
+9960 → 9443 (seed data, external commit) → 8120 lines so far.
 
 ### Tasks
 
@@ -158,7 +159,20 @@ Target: ~40 files of 50–400 lines instead of one 9,960-line file.
       import it). (Named `dummyData.js` rather than `seed.js` — matches the
       comment header already in the file describing it as wireframe/demo data.)
 - [x] Extract format/helper functions to `src/lib/format.js`.
-- [ ] Move each screen/admin component to its own file, updating imports.
+- [x] Extract `useYearRoundData` to `src/hooks/useYearRoundData.js`.
+- [x] Extract `YearPill`/`YearRoundPicker`/`RoundPicker` to
+      `src/components/YearRoundPicker.jsx`.
+- [x] Move `MessagesScreen` to `src/screens/Messages.jsx`.
+- [x] Move `GamesTab` + Poker/Skins/Ctp/LowNet panels to `src/screens/Games.jsx`.
+- [ ] Move each remaining screen/admin component to its own file, updating
+      imports — in progress. Remaining, in dependency order (leaves first):
+      admin `settings/*` (Roles, Year, TeamSetup, RoundSetup, MatchupSetup,
+      GamesSetup, GamesResults, CompetitionSetup, CompetitionResults) →
+      `ImportResults`/`ExportResults` → `PlayersScreen`/`CoursesScreen` →
+      `AdminSetupMenu`/`AdminResultsMenu` (already data-driven, just needs
+      moving) → `RecordBook`/`EarningsTable` → `More` (imports all of the
+      above) → `ScoreEntry` → `Leaderboard` + Solo/Team/CarrollCup
+      tables/scorecards → `MatchResultsTab`.
 - [ ] Reduce `AppShell.jsx` to the shell + tab routing.
 
 ### ⚠️ Risk note
