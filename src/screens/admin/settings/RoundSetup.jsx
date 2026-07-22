@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchEvents, fetchEventByYear, fetchRounds, createRound, updateRound, deleteRound } from "../../lib/api.js";
-import { COURSES, ROUND_COURSE, SCORE_ROUNDS } from "../../data/dummyData.js";
-import { ScreenHeader } from "../../components/ScreenHeader.jsx";
-import { SettingsSection } from "../../components/SettingsSection.jsx";
-import { FormField } from "../../components/FormField.jsx";
-import { FormInput } from "../../components/FormInput.jsx";
-import { FormSelect } from "../../components/FormSelect.jsx";
-import { Banner } from "../../components/Banner.jsx";
-import { RemoveButton, AddRowButton } from "../../components/RowButtons.jsx";
+import { fetchEvents, fetchEventByYear, fetchRounds, createRound, updateRound, deleteRound } from "../../../lib/api.js";
+import { COURSES, ROUND_COURSE, SCORE_ROUNDS } from "../../../data/dummyData.js";
+import { ScreenHeader } from "../../../components/ScreenHeader.jsx";
+import { SettingsSection } from "../../../components/SettingsSection.jsx";
+import { FormField } from "../../../components/FormField.jsx";
+import { FormInput } from "../../../components/FormInput.jsx";
+import { FormSelect } from "../../../components/FormSelect.jsx";
+import { Banner } from "../../../components/Banner.jsx";
+import { RemoveButton, AddRowButton } from "../../../components/RowButtons.jsx";
 
 function RoundSetupSettings({ onBack, isLive, currentYear, refreshRoundMap }) {
   const idRef = useRef(1000);

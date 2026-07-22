@@ -4,6 +4,10 @@ A prioritized, actionable plan to slim down the codebase and make it easy to
 maintain by hand and by AI coding agents. Every task is scoped to be
 **behavior-preserving** unless explicitly noted.
 
+> For the current directory layout and routing structure (i.e. where things
+> ended up, not the plan to get there), see the **Architecture** section in
+> `README.md`. This file stays focused on what changed and why.
+
 ## The core problem
 
 The app logic is well-organized *except* for one file:
@@ -131,6 +135,12 @@ Promoted ahead of P1 — see the reorder note above.
 `TABS` config, `SHARED_STYLES`, and the `activeTab` switch that renders each
 screen. Every screen/admin component now lives in its own file under
 `src/screens/`, `src/admin/`, `src/components/`, or `src/lib/`.
+
+> **Update (post-routing work):** `src/admin/` was subsequently moved to
+> `src/screens/admin/` — admin is just more route-mounted screens, so it now
+> lives alongside the rest of `screens/` instead of as a sibling top-level
+> folder. The tree below reflects the structure *as of the P2 split*; see
+> `README.md`'s Architecture section for the current layout.
 
 ### Target structure
 

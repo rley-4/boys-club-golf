@@ -6,16 +6,16 @@ import {
   setCurrentEvent,
   fetchPayoutSnapshotTimestamp,
   recalculatePayoutSnapshot,
-} from "../../lib/api.js";
-import { recalculateYearStats, fetchYearStatsTimestamp } from "../../lib/stats.js";
-import { RECORD_YEARS } from "../../data/dummyData.js";
-import { ScreenHeader } from "../../components/ScreenHeader.jsx";
-import { SettingsSection } from "../../components/SettingsSection.jsx";
-import { FormField } from "../../components/FormField.jsx";
-import { FormInput } from "../../components/FormInput.jsx";
-import { Banner } from "../../components/Banner.jsx";
-import { Button } from "../../components/Button.jsx";
-import { RecalcRow } from "../../components/RecalculateControl.jsx";
+} from "../../../lib/api.js";
+import { recalculateYearStats, fetchYearStatsTimestamp } from "../../../lib/stats.js";
+import { RECORD_YEARS } from "../../../data/dummyData.js";
+import { ScreenHeader } from "../../../components/ScreenHeader.jsx";
+import { SettingsSection } from "../../../components/SettingsSection.jsx";
+import { FormField } from "../../../components/FormField.jsx";
+import { FormInput } from "../../../components/FormInput.jsx";
+import { Banner } from "../../../components/Banner.jsx";
+import { Button } from "../../../components/Button.jsx";
+import { RecalcRow } from "../../../components/RecalculateControl.jsx";
 
 // Solo/Team Leaderboard scoring drops the worst of these rounds — used only
 // to seed a sensible default roundsPlayed before real event data loads.

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
-import { fetchEvents, updateCoursePlayedYear, createCourse, createCourseHoles } from "../lib/api.js";
-import { COURSES } from "../data/dummyData.js";
-import { ScreenHeader } from "../components/ScreenHeader.jsx";
-import { FormField } from "../components/FormField.jsx";
-import { FormInput } from "../components/FormInput.jsx";
-import { Banner } from "../components/Banner.jsx";
-import { Button } from "../components/Button.jsx";
+import { fetchEvents, updateCoursePlayedYear, createCourse, createCourseHoles } from "../../lib/api.js";
+import { COURSES } from "../../data/dummyData.js";
+import { ScreenHeader } from "../../components/ScreenHeader.jsx";
+import { FormField } from "../../components/FormField.jsx";
+import { FormInput } from "../../components/FormInput.jsx";
+import { Banner } from "../../components/Banner.jsx";
+import { Button } from "../../components/Button.jsx";
 
 // ---------------------------------------------------------------------------
 // Courses — course-tee metadata plus hole-by-hole reference data.

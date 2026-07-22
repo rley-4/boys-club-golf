@@ -10,14 +10,14 @@ import {
   updatePlayerHandicap,
   fetchAllPayoutSnapshots,
   createPlayer,
-} from "../lib/api.js";
-import { PLAYERS, WIREFRAME_YEARS } from "../data/dummyData.js";
-import { ScreenHeader } from "../components/ScreenHeader.jsx";
-import { StatTile } from "../components/StatTile.jsx";
-import { FormField } from "../components/FormField.jsx";
-import { FormInput } from "../components/FormInput.jsx";
-import { Banner } from "../components/Banner.jsx";
-import { Button } from "../components/Button.jsx";
+} from "../../lib/api.js";
+import { PLAYERS, WIREFRAME_YEARS } from "../../data/dummyData.js";
+import { ScreenHeader } from "../../components/ScreenHeader.jsx";
+import { StatTile } from "../../components/StatTile.jsx";
+import { FormField } from "../../components/FormField.jsx";
+import { FormInput } from "../../components/FormInput.jsx";
+import { Banner } from "../../components/Banner.jsx";
+import { Button } from "../../components/Button.jsx";
 
 // ---------------------------------------------------------------------------
 // Players — roster with bios and handicap index. This screen edits a local

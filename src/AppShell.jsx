@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { fetchEventByYear, fetchPlayers, fetchRounds } from "./lib/api.js";
 import { Flag, Trophy, Coins, MoreHorizontal, Swords, MessagesSquare } from "lucide-react";
 import { ThemeProvider, Paper, BottomNavigation, BottomNavigationAction } from "@mui/material";
@@ -6,6 +7,7 @@ import theme from "./theme.js";
 import { MessagesScreen } from "./screens/Messages.jsx";
 import { GamesTab } from "./screens/Games.jsx";
 import { More } from "./screens/More.jsx";
+import { AdminRoutes } from "./screens/admin/AdminRoutes.jsx";
 import { ScoreEntry } from "./screens/ScoreEntry.jsx";
 import { MatchResultsTab } from "./screens/MatchResults.jsx";
 import { Leaderboard } from "./screens/Leaderboard/index.jsx";
@@ -25,13 +27,16 @@ export { COURSES, ROUND_COURSE, WIREFRAME_YEARS, PLAYERS, SCORE_ROUNDS, ROUND_ID
 // Score entry always writes to the current event year.
 const CURRENT_YEAR = RECORD_YEARS[0];
 
+// Each tab is now a real URL segment, not just an in-memory state key —
+// `path` is what gets pushed to the browser (and read back out on refresh),
+// while `key` stays around as the React-side identity/label lookup.
 const TABS = [
-  { key: "score", label: "Score", icon: Flag },
-  { key: "leaderboard", label: "Leaderboard", icon: Trophy },
-  { key: "matches", label: "Matches", icon: Swords },
-  { key: "games", label: "Games", icon: Coins },
-  { key: "messages", label: "Messages", icon: MessagesSquare },
-  { key: "more", label: "More", icon: MoreHorizontal },
+  { key: "score", path: "/score", label: "Score", icon: Flag },
+  { key: "leaderboard", path: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { key: "matches", path: "/matches", label: "Matches", icon: Swords },
+  { key: "games", path: "/games", label: "Games", icon: Coins },
+  { key: "messages", path: "/messages", label: "Messages", icon: MessagesSquare },
+  { key: "more", path: "/more", label: "More", icon: MoreHorizontal },
 ];
 
 const SHARED_STYLES = `
@@ -137,7 +142,17 @@ const SHARED_STYLES = `
 `;
 
 export default function AppShell({ initialYear, isLive = false, loadError = null, myPlayer = null } = {}) {
-  const [activeTab, setActiveTab] = useState("score");
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Which tab is highlighted is derived from the URL rather than tracked in
+  // its own state, so a refresh (or a link, or the browser back button)
+  // lands on the right tab without any extra bookkeeping.
+  const activeTab = TABS.find((t) => location.pathname.startsWith(t.path))?.key ?? (location.pathname.startsWith("/admin") ? "more" : "score");
+  // Not real security yet — that's what RLS (sql/26) is for. This just
+  // keeps the More menu (and direct navigation to /admin/*) honest about
+  // what a non-admin can actually do once RLS is on. In demo/offline mode
+  // (no real accounts at all) everything stays visible, same as before.
+  const isAdmin = !isLive || myPlayer?.role === "admin";
   // Shared across Score and Matches so match progress reflects live saves.
   // Key: "year-round-playerId" -> { entries: { [hole]: {strokes, putts} }, status: "in-progress" | "submitted" }
   const [scoresStore, setScoresStore] = useState({});
@@ -234,26 +249,50 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
   }, [currentYear, isLive]);
 
   const screenContent = (
-    <>
-      {activeTab === "score" && (
-        <ScoreEntry
-          scoresStore={scoresStore}
-          setScoresStore={setScoresStore}
-          currentYear={currentYear}
-          isLive={isLive}
-          loadError={loadError}
-          currentEventId={currentEventId}
-          myPlayer={myPlayer}
-        />
-      )}
-      {activeTab === "leaderboard" && <Leaderboard isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />}
-      {activeTab === "matches" && <MatchResultsTab scoresStore={scoresStore} currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
-      {activeTab === "games" && <GamesTab currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} myPlayer={myPlayer} />}
-      {activeTab === "messages" && <MessagesScreen isLive={isLive} myPlayer={myPlayer} />}
-      {activeTab === "more" && (
-        <More currentYear={currentYear} setCurrentYear={setCurrentYear} isLive={isLive} currentEventId={currentEventId} refreshRoundMap={refreshRoundMap} myPlayer={myPlayer} />
-      )}
-    </>
+    <Routes>
+      <Route path="/" element={<Navigate to="/score" replace />} />
+      <Route
+        path="/score"
+        element={
+          <ScoreEntry
+            scoresStore={scoresStore}
+            setScoresStore={setScoresStore}
+            currentYear={currentYear}
+            isLive={isLive}
+            loadError={loadError}
+            currentEventId={currentEventId}
+            myPlayer={myPlayer}
+          />
+        }
+      />
+      <Route path="/leaderboard" element={<Leaderboard isLive={isLive} currentEventId={currentEventId} currentYear={currentYear} />} />
+      <Route
+        path="/matches"
+        element={<MatchResultsTab scoresStore={scoresStore} currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} />}
+      />
+      <Route path="/games" element={<GamesTab currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} myPlayer={myPlayer} />} />
+      <Route path="/messages" element={<MessagesScreen isLive={isLive} myPlayer={myPlayer} />} />
+      <Route
+        path="/more/*"
+        element={
+          <More currentYear={currentYear} isLive={isLive} currentEventId={currentEventId} myPlayer={myPlayer} isAdmin={isAdmin} />
+        }
+      />
+      <Route
+        path="/admin/*"
+        element={
+          <AdminRoutes
+            isAdmin={isAdmin}
+            currentYear={currentYear}
+            setCurrentYear={setCurrentYear}
+            isLive={isLive}
+            currentEventId={currentEventId}
+            refreshRoundMap={refreshRoundMap}
+          />
+        }
+      />
+      <Route path="*" element={<Navigate to="/score" replace />} />
+    </Routes>
   );
 
   return (
@@ -270,7 +309,7 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
             return (
               <button
                 key={t.key}
-                onClick={() => setActiveTab(t.key)}
+                onClick={() => navigate(t.path)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -304,7 +343,7 @@ export default function AppShell({ initialYear, isLive = false, loadError = null
           className="bco-bottombar-mui"
           sx={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         >
-          <BottomNavigation showLabels value={activeTab} onChange={(event, newValue) => setActiveTab(newValue)} sx={{ bgcolor: "#F3EFE2", height: 64 }}>
+          <BottomNavigation showLabels value={activeTab} onChange={(event, newValue) => navigate(TABS.find((t) => t.key === newValue).path)} sx={{ bgcolor: "#F3EFE2", height: 64 }}>
             {TABS.map((t) => {
               const Icon = t.icon;
               const active = activeTab === t.key;

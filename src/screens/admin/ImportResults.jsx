@@ -15,12 +15,12 @@ import {
   fetchRoundMatchups,
   createRoundMatchup,
   upsertTeamHoleResult,
-} from "../lib/api.js";
-import { ScreenHeader } from "../components/ScreenHeader.jsx";
-import { Banner } from "../components/Banner.jsx";
-import { AutoComputedNote } from "../components/AutoComputedNote.jsx";
-import { Button } from "../components/Button.jsx";
-import { PLAYERS, COURSES, RECORD_YEARS } from "../data/dummyData.js";
+} from "../../lib/api.js";
+import { ScreenHeader } from "../../components/ScreenHeader.jsx";
+import { Banner } from "../../components/Banner.jsx";
+import { AutoComputedNote } from "../../components/AutoComputedNote.jsx";
+import { Button } from "../../components/Button.jsx";
+import { PLAYERS, COURSES, RECORD_YEARS } from "../../data/dummyData.js";
 
 // Score entry always writes to the current event year.
 const CURRENT_YEAR = RECORD_YEARS[0];

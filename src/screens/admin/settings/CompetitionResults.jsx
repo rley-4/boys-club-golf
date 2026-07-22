@@ -7,15 +7,15 @@ import {
   fetchPayoutSnapshotTimestamp,
   fetchSoloTiebreakDetail,
   fetchTeamTiebreakDetail,
-} from "../../lib/api.js";
-import { PLAYERS } from "../../data/dummyData.js";
-import { ScreenHeader } from "../../components/ScreenHeader.jsx";
-import { SettingsSection } from "../../components/SettingsSection.jsx";
-import { FormField } from "../../components/FormField.jsx";
-import { FormSelect } from "../../components/FormSelect.jsx";
-import { Banner } from "../../components/Banner.jsx";
-import { AutoComputedNote } from "../../components/AutoComputedNote.jsx";
-import { LastCalculatedNote } from "../../components/RecalculateControl.jsx";
+} from "../../../lib/api.js";
+import { PLAYERS } from "../../../data/dummyData.js";
+import { ScreenHeader } from "../../../components/ScreenHeader.jsx";
+import { SettingsSection } from "../../../components/SettingsSection.jsx";
+import { FormField } from "../../../components/FormField.jsx";
+import { FormSelect } from "../../../components/FormSelect.jsx";
+import { Banner } from "../../../components/Banner.jsx";
+import { AutoComputedNote } from "../../../components/AutoComputedNote.jsx";
+import { LastCalculatedNote } from "../../../components/RecalculateControl.jsx";
 
 function CompetitionResultsSettings({ onBack, isLive, currentYear }) {
   const [years, setYears] = useState([currentYear]);

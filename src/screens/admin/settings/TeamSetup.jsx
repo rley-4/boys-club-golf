@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchEvents, fetchEventByYear, fetchTeams, createTeam, updateTeam, deleteTeam, fetchCarrollCupRoster, upsertCarrollCupAssignment, fetchAllPlayerCompetedYears } from "../../lib/api.js";
-import { PLAYERS, TEAMS, CARROLL_CUP_ROSTER_DEFAULT } from "../../data/dummyData.js";
-import { ScreenHeader } from "../../components/ScreenHeader.jsx";
-import { SettingsSection } from "../../components/SettingsSection.jsx";
-import { FormField } from "../../components/FormField.jsx";
-import { FormInput } from "../../components/FormInput.jsx";
-import { FormSelect } from "../../components/FormSelect.jsx";
-import { Banner } from "../../components/Banner.jsx";
-import { RemoveButton, AddRowButton } from "../../components/RowButtons.jsx";
+import { fetchEvents, fetchEventByYear, fetchTeams, createTeam, updateTeam, deleteTeam, fetchCarrollCupRoster, upsertCarrollCupAssignment, fetchAllPlayerCompetedYears } from "../../../lib/api.js";
+import { PLAYERS, TEAMS, CARROLL_CUP_ROSTER_DEFAULT } from "../../../data/dummyData.js";
+import { ScreenHeader } from "../../../components/ScreenHeader.jsx";
+import { SettingsSection } from "../../../components/SettingsSection.jsx";
+import { FormField } from "../../../components/FormField.jsx";
+import { FormInput } from "../../../components/FormInput.jsx";
+import { FormSelect } from "../../../components/FormSelect.jsx";
+import { Banner } from "../../../components/Banner.jsx";
+import { RemoveButton, AddRowButton } from "../../../components/RowButtons.jsx";
 
 function TeamSetupSettings({ onBack, isLive, currentYear }) {
   const idRef = useRef(1000);

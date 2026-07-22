@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { fetchPlayerRoles, updatePlayerRole } from "../../lib/api.js";
-import { ScreenHeader } from "../../components/ScreenHeader.jsx";
-import { SettingsSection } from "../../components/SettingsSection.jsx";
-import { Banner } from "../../components/Banner.jsx";
+import { fetchPlayerRoles, updatePlayerRole } from "../../../lib/api.js";
+import { ScreenHeader } from "../../../components/ScreenHeader.jsx";
+import { SettingsSection } from "../../../components/SettingsSection.jsx";
+import { Banner } from "../../../components/Banner.jsx";
 
 const ROLE_INFO = {
   admin: {

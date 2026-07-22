@@ -1,6 +1,7 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { Trophy, Coins, Swords, User, Calendar, Users, Import, Upload } from "lucide-react";
-import { ScreenHeader } from "../components/ScreenHeader.jsx";
+import { ScreenHeader } from "../../components/ScreenHeader.jsx";
 
 // ---------------------------------------------------------------------------
 // Admin menu — Import/Export, Event settings, and Game settings are real.
@@ -61,23 +62,23 @@ const ADMIN_SETUP_SECTIONS = [
   {
     title: "General setup",
     items: [
-      { label: "Roles", icon: User, target: "admin-roles" },
-      { label: "Years", icon: Calendar, target: "admin-general" },
+      { label: "Roles", icon: User, target: "/admin/setup/roles" },
+      { label: "Years", icon: Calendar, target: "/admin/setup/years" },
     ],
   },
   {
     title: "Tournament setup",
     items: [
-      { label: "Round setup", icon: GolfClubIcon, target: "admin-rounds" },
-      { label: "Team setup", icon: Users, target: "admin-teams" },
-      { label: "Matchup setup", icon: Swords, target: "admin-matchups" },
+      { label: "Round setup", icon: GolfClubIcon, target: "/admin/setup/rounds" },
+      { label: "Team setup", icon: Users, target: "/admin/setup/teams" },
+      { label: "Matchup setup", icon: Swords, target: "/admin/setup/matchups" },
     ],
   },
   {
     title: "Money setup",
     items: [
-      { label: "Competition setup", icon: Trophy, target: "admin-competitions-setup" },
-      { label: "Games setup", icon: Coins, target: "admin-games-setup" },
+      { label: "Competition setup", icon: Trophy, target: "/admin/setup/competitions" },
+      { label: "Games setup", icon: Coins, target: "/admin/setup/games" },
     ],
   },
 ];
@@ -86,20 +87,21 @@ const ADMIN_RESULTS_SECTIONS = [
   {
     title: "Results data",
     items: [
-      { label: "Competition results", icon: Trophy, target: "admin-competitions-results" },
-      { label: "Games results", icon: Coins, target: "admin-games-results" },
+      { label: "Competition results", icon: Trophy, target: "/admin/results/competitions" },
+      { label: "Games results", icon: Coins, target: "/admin/results/games" },
     ],
   },
   {
     title: "Bulk data",
     items: [
-      { label: "Import", icon: Import, target: "admin-import" },
-      { label: "Export", icon: Upload, target: "admin-export" },
+      { label: "Import", icon: Import, target: "/admin/results/import" },
+      { label: "Export", icon: Upload, target: "/admin/results/export" },
     ],
   },
 ];
 
-function AdminMenu({ title, sections, onBack, onNavigate }) {
+function AdminMenu({ title, sections, onBack }) {
+  const navigate = useNavigate();
   return (
     <div style={{ padding: "14px 20px 24px" }}>
       <ScreenHeader title={title} onBack={onBack} backLabel="Back to More" marginBottom={18} />
@@ -107,7 +109,7 @@ function AdminMenu({ title, sections, onBack, onNavigate }) {
       {sections.map((section) => (
         <AdminIconRow key={section.title} title={section.title}>
           {section.items.map((item) => (
-            <AdminIconButton key={item.label} label={item.label} icon={item.icon} onClick={() => onNavigate(item.target)} />
+            <AdminIconButton key={item.label} label={item.label} icon={item.icon} onClick={() => navigate(item.target)} />
           ))}
         </AdminIconRow>
       ))}
@@ -115,10 +117,10 @@ function AdminMenu({ title, sections, onBack, onNavigate }) {
   );
 }
 
-export function AdminSetupMenu({ onBack, onNavigate }) {
-  return <AdminMenu title="Admin setup" sections={ADMIN_SETUP_SECTIONS} onBack={onBack} onNavigate={onNavigate} />;
+export function AdminSetupMenu({ onBack }) {
+  return <AdminMenu title="Admin setup" sections={ADMIN_SETUP_SECTIONS} onBack={onBack} />;
 }
 
-export function AdminResultsMenu({ onBack, onNavigate }) {
-  return <AdminMenu title="Admin results" sections={ADMIN_RESULTS_SECTIONS} onBack={onBack} onNavigate={onNavigate} />;
+export function AdminResultsMenu({ onBack }) {
+  return <AdminMenu title="Admin results" sections={ADMIN_RESULTS_SECTIONS} onBack={onBack} />;
 }

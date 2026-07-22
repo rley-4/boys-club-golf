@@ -1,13 +1,13 @@
 import React, { useState } from "react";
-import { fetchSoloStandings, fetchTeamStandings, fetchSkins, fetchPokerCards } from "../lib/stats.js";
-import { fetchTeams } from "../lib/api.js";
-import { ScreenHeader } from "../components/ScreenHeader.jsx";
-import { Banner } from "../components/Banner.jsx";
-import { AutoComputedNote } from "../components/AutoComputedNote.jsx";
-import { Button } from "../components/Button.jsx";
-import { fmtDiff } from "../lib/format.js";
-import { soloRecordsSorted, teamRecordsSorted, soloResults, teamResults } from "../lib/yearlyStats.js";
-import { PLAYERS, SKINS_PREVIEW, POKER_PREVIEW, SCORE_ROUNDS, ROUND_ID_BY_LABEL } from "../data/dummyData.js";
+import { fetchSoloStandings, fetchTeamStandings, fetchSkins, fetchPokerCards } from "../../lib/stats.js";
+import { fetchTeams } from "../../lib/api.js";
+import { ScreenHeader } from "../../components/ScreenHeader.jsx";
+import { Banner } from "../../components/Banner.jsx";
+import { AutoComputedNote } from "../../components/AutoComputedNote.jsx";
+import { Button } from "../../components/Button.jsx";
+import { fmtDiff } from "../../lib/format.js";
+import { soloRecordsSorted, teamRecordsSorted, soloResults, teamResults } from "../../lib/yearlyStats.js";
+import { PLAYERS, SKINS_PREVIEW, POKER_PREVIEW, SCORE_ROUNDS, ROUND_ID_BY_LABEL } from "../../data/dummyData.js";
 
 // ---------------------------------------------------------------------------
 // Export results — CSV download of current mock data. Real app: same picker,

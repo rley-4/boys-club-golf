@@ -89,22 +89,154 @@ This is a first pass — "portions" driving off the backend, not the whole app y
 5. Fill in all 18 holes + putts, hit **Submit** — `round_submissions.status` should flip to `submitted`.
 6. Try a second "player" (open the app in another browser tab, pick a different player) to get a feel for multiple people saving into the same backend at once.
 
-## Project structure
+## Architecture
+
+### Boot sequence
+
+```
+main.jsx            wraps everything in <BrowserRouter>, mounts <App/>
+  App.jsx            resolves auth phase (or skips straight to "authed" in demo mode),
+                      then boots live data from Supabase (or falls back to built-in
+                      demo data), then renders AppShell
+    AppShell.jsx      the app shell — sidebar/bottom-nav chrome, shared state
+                      (current year, scores store, event id), and the top-level
+                      <Routes> that mount each tab's screen
+```
+
+### Directory structure
 
 ```
 src/
-  App.jsx              bootstraps live data (or falls back to demo data), then renders AppShell
-  AppShell.jsx          the whole UI — all tabs, all screens
-  main.jsx              Vite entry point
+  main.jsx                Vite entry point — <BrowserRouter><App/></BrowserRouter>
+  App.jsx                 auth phase + live-data boot, then renders AppShell
+  AppShell.jsx            shell chrome (sidebar/bottom nav) + top-level route table
+  LoginScreen.jsx, SetPasswordScreen.jsx, ClaimProfileScreen.jsx
+                           auth screens shown before AppShell mounts
+  theme.js                 MUI theme — palette, fonts, the `bco` namespace of
+                            golf-specific tokens (chip greens, banner colors, etc.)
+
+  screens/                 one tab = one file (or folder)
+    ScoreEntry.jsx
+    Messages.jsx
+    Games.jsx               GamesTab + Poker/Skins/Ctp/LowNet panels
+    MatchResults.jsx        MatchResultsTab + progress/side/row helpers
+    Leaderboard/            index.jsx, SoloTable/TeamTable/CarrollCupTable,
+                             MatchScorecard.jsx, tiebreak.js
+    More.jsx                the "More" tab's own nested <Routes> (menu +
+                             Record Book/Players/Courses)
+    RecordBook.jsx
+
+    admin/                  everything under /admin/* — nested under screens/
+                             since it's just more route-mounted screens, not a
+                             separate concern from the rest of screens/
+      AdminRoutes.jsx        owns the /admin/* route table (see Routing below)
+      AdminMenus.jsx         AdminSetupMenu/AdminResultsMenu, data-driven from
+                             ADMIN_SETUP_SECTIONS/ADMIN_RESULTS_SECTIONS
+      PlayersScreen.jsx, CoursesScreen.jsx
+      ImportResults.jsx, ExportResults.jsx
+      settings/              Roles, Year, TeamSetup, RoundSetup, MatchupSetup,
+                             GamesSetup, GamesResults, CompetitionSetup,
+                             CompetitionResults — one admin settings screen each
+
+  components/               shared primitives, each with one job
+    ScreenHeader.jsx, Button.jsx, Pill.jsx, StatTile.jsx, Banner.jsx,
+    FormField.jsx, FormInput.jsx, FormSelect.jsx, YearRoundPicker.jsx,
+    SettingsSection.jsx, RowButtons.jsx, RecalculateControl.jsx,
+    AutoComputedNote.jsx
+
+  data/dummyData.js        PLAYERS, COURSES, TEAMS, WIREFRAME_YEARS, and the
+                            mutable ROUND_* maps — hydrated in place by
+                            App.jsx/AppShell.jsx from Supabase when live (see
+                            the risk note in REFACTOR.md before converting
+                            these to React state)
+  hooks/useYearRoundData.js
   lib/
-    supabaseClient.js   creates the Supabase client from .env
-    api.js               every Supabase read/write call for config data (players, courses, teams, rounds, matchups, scores) lives here
-    stats.js              every computed-result read (standings, points, skins, poker, low net) lives here — thin wrappers around the views in 02_calculations.sql, not reimplemented logic
+    supabaseClient.js       creates the Supabase client from .env
+    api.js                  every Supabase read/write call for config data
+                            (players, courses, teams, rounds, matchups, scores)
+    stats.js                every computed-result read (standings, points,
+                            skins, poker, low net) — thin wrappers around the
+                            views in 02_calculations.sql, not reimplemented logic
+    auth.js                 sign in/out, session state, "which player am I" lookup
+    format.js, handicap.js, yearlyStats.js
+                            formatting + golf-math + record-book helpers
+
 sql/
-  01_schema.sql          tables
-  02_calculations.sql     computed views
-  03_seed.sql             sample data (regenerate via `node scripts/gen-seed.mjs` if you tweak the source data in scripts/gen-seed.mjs)
+  01_schema.sql            tables
+  02_calculations.sql      computed views
+  03_seed.sql              sample data (regenerate via `node scripts/gen-seed.mjs`
+                            if you tweak the source data in scripts/gen-seed.mjs)
 ```
+
+`AppShell.jsx` used to be a single 9,960-line file holding the entire UI. It's
+now 300-odd lines of shell + routing; every screen/admin component above got
+extracted along the way. See `REFACTOR.md` for the full history of that split
+and what's still left (mostly incremental MUI adoption).
+
+### Routing
+
+Navigation is a real URL tree via [`react-router-dom`](https://reactrouter.com/)
+(`BrowserRouter`), not in-memory tab state — refreshing the page, using the
+browser back/forward buttons, or bookmarking/sharing a link all land you back
+on the exact screen you were on.
+
+```
+/score, /leaderboard, /matches, /games, /messages   top-level tabs (AppShell)
+/more                                                "More" menu (screens/More.jsx)
+  /more/record-book
+  /more/players
+  /more/courses
+/admin/setup                                        Admin Setup menu (screens/admin/AdminRoutes.jsx)
+  /admin/setup/roles
+  /admin/setup/years
+  /admin/setup/rounds
+  /admin/setup/teams
+  /admin/setup/matchups
+  /admin/setup/competitions
+  /admin/setup/games
+/admin/results                                       Admin Results menu
+  /admin/results/competitions
+  /admin/results/games
+  /admin/results/import
+  /admin/results/export
+```
+
+A few things worth knowing if you touch this:
+
+- **Admin is a sibling of More in the URL, even though its files live under
+  `screens/admin/`.** The nesting under `screens/` is a code-organization
+  choice (it's still just route-mounted screens, like everything else in
+  `screens/`) — it doesn't change the URL tree. You reach `/admin/*`
+  by tapping "Admin Setup"/"Admin Results" from the More menu, but the URLs
+  live at the top level (`/admin/...`), not under `/more/admin/...`. The old
+  `/more/admin/*` paths no longer resolve to anything — they fall through to
+  More's catch-all route and redirect back to `/more`.
+- **Admin access is gated in two places**, both UX-only — real enforcement is
+  Postgres RLS (`sql/26_row_level_security.sql`): the More menu hides the two
+  Admin rows, and `AdminRoutes` redirects straight back to `/more` if you try
+  to hit an `/admin/*` URL directly while `isAdmin` is false. In demo/offline
+  mode (`isLive === false`), everything stays visible either way.
+- **Every screen keeps its existing `onBack`/prop-based API.** Wiring up
+  routing was almost entirely done in the files that own navigation —
+  `AppShell.jsx`, `screens/More.jsx`, `screens/admin/AdminRoutes.jsx` (plus
+  `screens/admin/AdminMenus.jsx` for the two admin icon-grid menus) — rather
+  than touching all ~20 individual screen components.
+- **Deploying to a static host needs SPA fallback**, or a hard refresh on a
+  deep link (e.g. `/admin/setup/roles`) will 404 before React Router ever
+  gets a chance to run. `public/_redirects` (Netlify) and `vercel.json`
+  (Vercel) are already set up for that; Vite's own dev/preview servers do
+  this automatically, no config needed.
+
+### State management
+
+`AppShell.jsx` owns the state that's genuinely shared across tabs — current
+year, the in-progress scores store, the current event id — and passes it down
+as props to whichever screen the router mounts. There's no global store
+(Redux/Context) beyond that; each screen/admin file otherwise manages its own
+local state. `data/dummyData.js`'s arrays (`PLAYERS`, `COURSES`, `ROUND_*`) are
+a deliberate exception — see the directory listing above and `REFACTOR.md`'s
+risk note for why they're still mutated in place rather than lifted into React
+state.
 
 **`stats.js` is now wired into Leaderboard (Solo, Team), Matches' points, and all four Games panels.**
 - **Skins**: real per-hole winners and pot math from `v_skins`/`v_skins_payout`.

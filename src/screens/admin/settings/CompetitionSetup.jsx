@@ -9,15 +9,15 @@ import {
   fetchCompetitionPayoutPlaces,
   upsertCompetitionPayoutPlace,
   deleteCompetitionPayoutPlace,
-} from "../../lib/api.js";
-import { ScreenHeader } from "../../components/ScreenHeader.jsx";
-import { SettingsSection } from "../../components/SettingsSection.jsx";
-import { FormField } from "../../components/FormField.jsx";
-import { FormInput } from "../../components/FormInput.jsx";
-import { FormSelect } from "../../components/FormSelect.jsx";
-import { Banner } from "../../components/Banner.jsx";
-import { Button } from "../../components/Button.jsx";
-import { AutoComputedNote } from "../../components/AutoComputedNote.jsx";
+} from "../../../lib/api.js";
+import { ScreenHeader } from "../../../components/ScreenHeader.jsx";
+import { SettingsSection } from "../../../components/SettingsSection.jsx";
+import { FormField } from "../../../components/FormField.jsx";
+import { FormInput } from "../../../components/FormInput.jsx";
+import { FormSelect } from "../../../components/FormSelect.jsx";
+import { Banner } from "../../../components/Banner.jsx";
+import { Button } from "../../../components/Button.jsx";
+import { AutoComputedNote } from "../../../components/AutoComputedNote.jsx";
 
 const COMPETITION_LABELS = { solo: "Solo", team: "Team", carroll_cup: "Carroll Cup" };
 

@@ -10,14 +10,14 @@ import {
   updateRoundMatchup,
   deleteRoundMatchup,
   fetchAllPlayerCompetedYears,
-} from "../../lib/api.js";
-import { PLAYERS, TEAMS, SCORE_ROUNDS } from "../../data/dummyData.js";
-import { ScreenHeader } from "../../components/ScreenHeader.jsx";
-import { SettingsSection } from "../../components/SettingsSection.jsx";
-import { FormField } from "../../components/FormField.jsx";
-import { FormSelect } from "../../components/FormSelect.jsx";
-import { Banner } from "../../components/Banner.jsx";
-import { RemoveButton, AddRowButton } from "../../components/RowButtons.jsx";
+} from "../../../lib/api.js";
+import { PLAYERS, TEAMS, SCORE_ROUNDS } from "../../../data/dummyData.js";
+import { ScreenHeader } from "../../../components/ScreenHeader.jsx";
+import { SettingsSection } from "../../../components/SettingsSection.jsx";
+import { FormField } from "../../../components/FormField.jsx";
+import { FormSelect } from "../../../components/FormSelect.jsx";
+import { Banner } from "../../../components/Banner.jsx";
+import { RemoveButton, AddRowButton } from "../../../components/RowButtons.jsx";
 
 function MatchupSetupSettings({ onBack, isLive, currentYear }) {
   const idRef = useRef(1000);
