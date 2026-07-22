@@ -47,6 +47,14 @@ export function formatCalculatedAt(iso) {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+export const MEDAL_TONES = {
+  gold: { bg: "#F5E1A4", fg: "#7A5C0A" },
+  silver: { bg: "#E4E4E4", fg: "#5A5A5A" },
+  bronze: { bg: "#EAD0B3", fg: "#8A5A2B" },
+};
+
+export const NET_DOUBLE_BOGEY = 2; // cap: net score can be at most par + 2
+
 export function ordinal(n) {
   if (n == null) return "";
   const rem100 = n % 100;
