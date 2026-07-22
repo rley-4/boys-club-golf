@@ -1,0 +1,46 @@
+---
+description: Material UI usage + styling conventions for BCO Golf (design tokens, when to reach for MUI)
+globs: src/**/*.jsx
+alwaysApply: false
+---
+
+# Material UI + styling
+
+This app uses **MUI v9** (`@mui/material`) with Emotion. A theme already exists at
+`src/theme.js` and is applied via `<ThemeProvider>` in `AppShell.jsx`.
+
+## API docs (reference these before hand-rolling a component)
+
+- Components overview: https://mui.com/material-ui/all-components/
+- Component API index: https://mui.com/material-ui/api/
+- `sx` prop: https://mui.com/system/getting-started/the-sx-prop/
+- Theming: https://mui.com/material-ui/customization/theming/
+- Default theme (token names): https://mui.com/material-ui/customization/default-theme/
+- Migration / v9 notes: https://mui.com/material-ui/migration/
+- Commonly needed here: [TextField](https://mui.com/material-ui/react-text-field/),
+  [Select](https://mui.com/material-ui/react-select/), [Button](https://mui.com/material-ui/react-button/),
+  [Table](https://mui.com/material-ui/react-table/), [Chip](https://mui.com/material-ui/react-chip/),
+  [Dialog](https://mui.com/material-ui/react-dialog/), [Tabs](https://mui.com/material-ui/react-tabs/),
+  [Card/Paper](https://mui.com/material-ui/react-card/), [Stack](https://mui.com/material-ui/react-stack/).
+
+## Rules
+
+1. **Prefer MUI components** over hand-rolled `<select>`/`<input>`/`<table>`/`<button>` +
+   inline styles. Reach for `TextField`, `Select`, `Button`, `Chip`, `Table`, `Dialog`, `Stack`.
+2. **Never hardcode hex colors.** Use theme tokens via `sx`:
+   `sx={{ color: 'primary.main', bgcolor: 'background.paper' }}`. If a color/spacing isn't in
+   `src/theme.js`, add it there (palette / spacing / custom `theme.bco.*`) instead of inlining it.
+3. **Style with `sx`, not `style={{}}`.** `sx` gets theme access, media-query shorthands, and
+   pseudo-selectors. Reserve inline `style` for truly one-off dynamic values.
+4. **Don't duplicate a component.** Search for an existing shared component (e.g. a single
+   `FormSelect`) before writing a new near-identical one.
+
+```jsx
+// ❌ BAD — hardcoded palette, hand-rolled control
+<select style={{ border: "1px solid #DCD6C4", borderRadius: 8, color: "#2C2A22" }}>…</select>
+
+// ✅ GOOD — MUI + theme tokens
+<Select size="small" value={value} onChange={(e) => onChange(e.target.value)}>
+  {options.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+</Select>
+```

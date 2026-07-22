@@ -53,7 +53,7 @@ export default function LoginScreen({ onSignedIn }) {
         fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');`}</style>
+      {/* Inter is loaded globally via index.html; see src/theme.js `fonts`. */}
 
       <img src="/bco-logo.jpg" alt="Boys Club Open" style={{ width: 168, height: 168, borderRadius: 16, marginBottom: 28 }} />
 

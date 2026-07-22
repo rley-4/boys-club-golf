@@ -6,6 +6,15 @@
     <link rel="icon" type="image/jpeg" href="/bco-logo.jpg" />
     <link rel="apple-touch-icon" href="/bco-logo.jpg" />
     <title>BCO</title>
+    <!-- App fonts, registered here (rather than a CSS @import) so they're
+         requested as early as possible and loaded once for the whole app.
+         Keep in sync with `fonts` in src/theme.js. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    />
   </head>
   <body style="margin:0;">
     <div id="root"></div>
