@@ -82,6 +82,7 @@ import { FormSelect } from "./components/FormSelect.jsx";
 import { FormInput } from "./components/FormInput.jsx";
 import { Banner } from "./components/Banner.jsx";
 import { FormField } from "./components/FormField.jsx";
+import { AutoComputedNote } from "./components/AutoComputedNote.jsx";
 import { Button } from "./components/Button.jsx";
 import { scoreLabel, scoreTone, fmtDiff, fmtStat, diffTone, ordinal } from "./lib/format.js";
 import { useYearRoundData } from "./hooks/useYearRoundData.js";

@@ -15,6 +15,7 @@ import {
   fetchSoloRoundGrossTotals,
 } from "../lib/stats.js";
 import { fetchGameSettings, fetchTeams, fetchCtpPayout } from "../lib/api.js";
+import { AutoComputedNote } from "../components/AutoComputedNote.jsx";
 import {
   COURSES,
   ROUND_COURSE,
@@ -129,25 +130,6 @@ export function GamesTab({ currentYear, isLive, currentEventId, myPlayer }) {
             <LowNetPanel round={round} year={yr.selectedYear} isLive={isLive} roundId={roundId} currentEventId={yr.selectedEventId} />
           ))}
       </div>
-    </div>
-  );
-}
-
-function AutoComputedNote({ children }) {
-  return (
-    <div
-      style={{
-        fontSize: 11.5,
-        color: "#6B6455",
-        background: "#F3EFE2",
-        border: "1px solid #E4DFCE",
-        borderRadius: 10,
-        padding: "10px 12px",
-        lineHeight: 1.5,
-        marginBottom: 14,
-      }}
-    >
-      {children}
     </div>
   );
 }
