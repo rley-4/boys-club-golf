@@ -235,6 +235,24 @@ export const SOLO_RECORDS = [
 
 export const RECORD_YEARS = [2026, 2025, 2024, 2023];
 
+export const SCORE_ROUNDS = ["R1", "R2", "R3", "R4", "R5", "R6"];
+// Populated by App.jsx after fetching `rounds` for the current event. Maps a
+// round label ("R1") to its real rounds.id row, so Score entry knows what to
+// write to. Empty map = not connected to Supabase yet, or that round doesn't
+// exist in the backend — Save/Submit then behaves exactly as the mock did.
+export const ROUND_ID_BY_LABEL = {};
+// Populated alongside ROUND_ID_BY_LABEL — which competitions each round's
+// results roll up into (the Solo/Team/Carroll Cup checkboxes on Round
+// setup). Leaderboard uses this to omit a round's column entirely when its
+// box is unchecked. Defaults (when a round isn't in this map — offline mode,
+// or not yet loaded) match the DB defaults: Solo and Team default to
+// included, Carroll Cup defaults to excluded.
+export const ROUND_FLAGS = {};
+// Play format per round ("stroke" | "scramble" | "alternate_shot") — set on
+// Round setup, read by Score entry to swap in a wireframed team-only note
+// for non-stroke-play rounds.
+export const ROUND_FORMATS = {};
+
 // Match Results tab — per-round team matchups. Course handicaps are computed
 // live from each player's handicapIndex against the course assigned to that
 // round (mocked here since round -> course assignment isn't persisted yet).
